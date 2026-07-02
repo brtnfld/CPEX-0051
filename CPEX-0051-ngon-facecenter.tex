@@ -199,6 +199,7 @@ not actually verifiable by the reference conformance tool.
 %% ═════════════════════════════════════════════════════════════════════════
 
 \subsection{Problem Statement}
+\label{sec:problem-statement}
 
 A common CFD data-storage need is a quantity defined on \emph{every} face
 of an unstructured mesh (e.g., face-normal velocities, surface fluxes on
@@ -316,26 +317,32 @@ implicit, unambiguous numbering.
 
 SIDS Section~7.7 defines the \texttt{DataSize[]} structure function,
 which is the authoritative statement of how \texttt{FlowSolution\_t}
-array sizes are derived. The \texttt{CellCenter} branch already relies
-\emph{entirely} on implicit element-based sizing:
+array sizes are derived. Quoted verbatim from the current SIDS source
+(non-\texttt{Rind} branches; the \texttt{Rind}-present branch follows the
+same pattern):
 
 \begin{lstlisting}[language=C]
-if (PointRange/PointList is present) {
-    DataSize[] = ListLength[] ;
-}
-else if (Rind is absent) {
-    if (GridLocation = Vertex) or (GridLocation is absent)
-        DataSize[] = VertexSize[] ;
-    else if (GridLocation = CellCenter)
-        DataSize[] = CellSize[] ;          /* <- implicit, from Elements_t */
-}
-/* ... Rind-present cases follow the same pattern ... */
+if (PointRange/PointList is present) then
+  {
+  DataSize[] = ListLength[] ;
+  }
+else if (Rind is absent) then
+  {
+  if (GridLocation = Vertex) or (GridLocation is absent)
+    {
+    DataSize[] = VertexSize[] ;
+    }
+  else if (GridLocation = CellCenter) then
+    {
+    DataSize[] = CellSize[] ;
+    }
+  }
 \end{lstlisting}
 
-No \texttt{PointList}/\texttt{PointRange} is required for the
-\texttt{CellCenter} branch because \texttt{CellSize[]} is already
-well-defined from the zone's \texttt{CellDimension}-order
-\texttt{Elements\_t} sections. This CPEX asks for nothing more than
+The \texttt{CellCenter} branch already relies \emph{entirely} on implicit
+element-based sizing: no \texttt{PointList}/\texttt{PointRange} is
+required there, because \texttt{CellSize[]} is already well-defined from
+the zone's \texttt{CellDimension}-order \texttt{Elements\_t} sections. This CPEX asks for nothing more than
 extending that same, already-accepted pattern to \texttt{FaceCenter} in
 the one case where an equally strong SIDS guarantee already exists ---
 \texttt{NGON\_n} coverage. See Section~\ref{sec:datasize} for the precise
@@ -367,16 +374,32 @@ if (location != CGNS_ENUMV(Vertex) &&
 \end{lstlisting}
 
 Plain \texttt{FaceCenter} --- the only location an unstructured zone can
-use for face data --- is not in this list. Today, the only way to create
-such a solution is the two-step sequence
-\texttt{cg\_sol\_write(..., CellCenter, ...)} followed by
-\texttt{cg\_gridlocation\_write(..., FaceCenter)}, which happens to work
-only because \texttt{cg\_gridlocation\_write} performs its own, separate
-validation (\texttt{cgi\_check\_location}) that \emph{does} permit
-\texttt{FaceCenter} for \texttt{CellDimension~$\geq$~3}. This is a latent
-usability bug independent of Note~5, and it directly affects every user
-who wants to write \texttt{FaceCenter} data today, whether or not this
-CPEX is adopted. Tracked as
+use for face data --- is not in this list. This does \emph{not} block the
+\emph{explicit}-point-set form in Example~\ref{sec:example1}:
+\texttt{cg\_sol\_ptset\_write()} already creates a \texttt{FaceCenter}
+solution with an accompanying \texttt{PointList}/\texttt{PointRange} in a
+single call today, because it validates via \texttt{cgi\_check\_location}
+directly and, internally, works around \texttt{cg\_sol\_write}'s allow-list
+by calling it with \texttt{location = Vertex} and overwriting
+\texttt{sol->location} afterward --- itself telling evidence that the
+allow-list is redundant with \texttt{cgi\_check\_location} rather than an
+independent rule (see Section~\ref{sec:mll_sol_write_fix}). The gap that
+\emph{does} block today is the \emph{point-set-free} form this CPEX
+introduces: \texttt{cg\_sol\_ptset\_write()} requires \texttt{npnts~>~0},
+so it cannot be used to create a bare \texttt{FaceCenter} solution with no
+point set at all, and \texttt{cg\_sol\_write} is the only entry point for
+that shape --- which is exactly where the allow-list rejects it. Today,
+the only way to create a point-set-free \texttt{FaceCenter} solution is
+the two-step sequence \texttt{cg\_sol\_write(..., CellCenter, ...)}
+followed by \texttt{cg\_gridlocation\_write(..., FaceCenter)}, which
+happens to work only because \texttt{cg\_gridlocation\_write} performs its
+own, separate validation (\texttt{cgi\_check\_location}) that \emph{does}
+permit \texttt{FaceCenter} for \texttt{CellDimension~$\geq$~3}. This is a
+latent usability bug independent of Note~5, and it directly affects every
+user who wants to write a point-set-free \texttt{FaceCenter} solution
+today (e.g.\ the identity-\texttt{PointRange} workaround plus later
+\texttt{cg\_gridlocation\_write} override, or any future use of this
+CPEX's implicit form), whether or not this CPEX is adopted. Tracked as
 \href{https://github.com/CGNS/CGNS/issues/964}{CGNS/CGNS \#964}.
 
 \subsubsection{\texttt{cgnscheck} never reads \texttt{FlowSolution\_t}'s point set}
@@ -393,18 +416,25 @@ if (z->type == CGNS_ENUMV(Unstructured)) {
 }
 \end{lstlisting}
 
-This fires for \emph{any} \texttt{GridLocation} other than
-\texttt{Vertex}/\texttt{CellCenter} on an unstructured zone ---
-including \texttt{FaceCenter} with a fully populated, conformant
-\texttt{PointRange}. \texttt{check\_solution()} never calls
-\texttt{cg\_ptset\_info}/\texttt{cg\_ptset\_read} at all, so today's
-required identity-point-set workaround (Section~2) is not actually
-validated by the reference conformance checker; it merely fails to be
-flagged as wrong once \texttt{error()}'s non-fatal path is taken. This
-CPEX's reference implementation fixes \texttt{get\_data\_size()} to honor
-\texttt{ListLength[]} from an explicit point set (already required by the
-current SIDS) in addition to the new implicit \texttt{NGON\_n} sizing
-this CPEX adds. Tracked as
+This branch is checked \emph{before} \texttt{get\_data\_size()} ever looks
+at \texttt{GridLocation~=~FaceCenter}, so it fires for \emph{any}
+\texttt{GridLocation} other than \texttt{Vertex}/\texttt{CellCenter} on an
+unstructured zone --- including \texttt{FaceCenter} with a fully
+populated, conformant \texttt{PointRange}. \texttt{check\_solution()}
+never calls \texttt{cg\_ptset\_info}/\texttt{cg\_ptset\_read} at all, so
+today's required identity-point-set workaround
+(Section~\ref{sec:problem-statement}) is not merely \emph{unvalidated} by
+the reference conformance checker --- it is \emph{actively misreported}.
+\texttt{error()} is non-fatal but not silent: it prints a counted
+\texttt{ERROR:} line and increments \texttt{cgnscheck}'s error tally for
+every \texttt{FaceCenter} solution on every unstructured zone in the file,
+today, for files that are fully conformant under the \emph{current} SIDS.
+This is a stronger motivation than mere non-validation: it is a
+false-positive in the reference tool that this CPEX's fix also happens to
+resolve. This CPEX's reference implementation fixes
+\texttt{get\_data\_size()} to honor \texttt{ListLength[]} from an explicit
+point set (already required by the current SIDS) in addition to the new
+implicit \texttt{NGON\_n} sizing this CPEX adds. Tracked as
 \href{https://github.com/CGNS/CGNS/issues/965}{CGNS/CGNS \#965}.
 
 %% ═════════════════════════════════════════════════════════════════════════
@@ -413,7 +443,7 @@ this CPEX adds. Tracked as
 
 \subsection{Design Overview}
 
-The proposal has three parts:
+The proposal has four parts:
 
 \begin{enumerate}[leftmargin=2em]
 \item A formal SIDS definition of \emph{complete NGON face coverage}
@@ -425,8 +455,14 @@ The proposal has three parts:
   (\S12.4), and a corresponding addition to the \texttt{DataSize[]}
   structure function (Section~\ref{sec:datasize}).
 \item MLL changes (Section~\ref{sec:mll}) to compute and validate the
-  implicit face count, plus the two unrelated implementation-gap fixes
-  from Section~\ref{sec:implementation-gaps}.
+  implicit face count, expose it to readers via a new public accessor
+  (Section~\ref{sec:mll_helper}), and fix the two unrelated
+  implementation gaps from Section~\ref{sec:implementation-gaps} (as
+  standalone, independently backportable patches --- see
+  Section~\ref{sec:api-summary}).
+\item A test plan (Section~\ref{sec:test-plan}) covering the coverage
+  predicate, the new sizing rule, and the write-ordering constraint this
+  CPEX introduces (Section~\ref{sec:backward-compat}).
 \end{enumerate}
 
 \subsection{Definition: Complete NGON Face Coverage}
@@ -487,6 +523,7 @@ SIDS has no analogous ``this element type enumerates all edges''
 primitive for edges, so no equivalent guarantee is available there.
 
 \subsection{Revised SIDS Text: \texttt{FlowSolution\_t} (\S7.7, Note~5)}
+\label{sec:flowsolution-redline}
 
 \textbf{Current text:}
 \begin{sidsold}
@@ -504,6 +541,7 @@ zone's NGON\_n element numbering directly.}
 \end{sidsnew}
 
 \subsection{Revised SIDS Text: \texttt{DiscreteData\_t} (\S12.4)}
+\label{sec:discretedata-redline}
 
 The matching clause in \texttt{DiscreteData\_t} is amended the same way,
 for consistency --- both notes were introduced together by CPEX~0031 and
@@ -533,57 +571,105 @@ regardless of \texttt{GridLocation}, so Note~5 there is not a burden in
 the same way. \texttt{BC\_t} does not carry this clause at all (a BC
 patch is definitionally a \emph{subset}, so an explicit point set is
 appropriate there even for a complete-coverage zone). See
-Section~\ref{sec:open-questions} for discussion of whether a future CPEX
-should revisit \texttt{ZoneSubRegion\_t} as well.
+Section~\ref{sec:zonesubregion-scope} for discussion of whether a future
+CPEX should revisit \texttt{ZoneSubRegion\_t} as well.
 
 \subsection{Revised \texttt{DataSize[]} Structure Function}
 \label{sec:datasize}
 
-Section~7.7's \texttt{DataSize[]} definition gains one new branch,
-inserted ahead of the existing \texttt{PointRange}/\texttt{PointList}
-check (an explicit point set, if present, still takes precedence, so
-existing identity-point-set files are unaffected):
+Section~7.7's \texttt{DataSize[]} definition gains one new
+\texttt{FaceCenter} case inside \emph{each} of the two existing
+\texttt{Rind} branches, in direct parallel with the existing
+\texttt{Vertex} and \texttt{CellCenter} cases. The explicit
+\texttt{PointRange}/\texttt{PointList} branch remains first and still
+takes precedence, so existing identity-point-set files are unaffected;
+and because the new cases sit \emph{inside} the \texttt{Rind} branches
+(rather than ahead of them), a \texttt{FaceCenter} solution carrying rind
+elements is still sized with its rind contribution, exactly as
+\texttt{CellCenter} is. The redline below follows the existing SIDS
+pseudocode style (\texttt{then} keywords, braces on their own lines)
+exactly as it appears in the current SIDS source, so the amendment can be
+applied to the standard's text verbatim; the two new cases are marked:
 
 \begin{lstlisting}[language=C]
-if (PointRange/PointList is present) {
-    DataSize[] = ListLength[] ;
-}
-else if (GridLocation = FaceCenter) and
-        (zone has complete NGON face coverage) then {
-    DataSize[] = FaceSize[] ;  /* E_end - E_start + 1 for the zone's
-                                * contiguous NGON_n block; see Sec. 4.2.
-                                * Named FaceSize[], not NFace[], to
-                                * avoid confusion with NFACE_n cell
-                                * counts. */
-}
-else if (Rind is absent) then {
-    if (GridLocation = Vertex) or (GridLocation is absent)
-        DataSize[] = VertexSize[] ;
-    else if (GridLocation = CellCenter)
-        DataSize[] = CellSize[] ;
-}
-else if (Rind is present) then {
-    /* unchanged; FaceSize[] + RindPlanes for the new FaceCenter case,
-       by direct analogy with the existing CellCenter branch */
-    ...
-}
+if (PointRange/PointList is present) then
+  {
+  DataSize[] = ListLength[] ;
+  }
+else if (Rind is absent) then
+  {
+  if (GridLocation = Vertex) or (GridLocation is absent)
+    {
+    DataSize[] = VertexSize[] ;
+    }
+  else if (GridLocation = CellCenter) then
+    {
+    DataSize[] = CellSize[] ;
+    }
+  else if (GridLocation = FaceCenter) and              /* new */
+          (zone has complete NGON face coverage) then
+    {
+    DataSize[] = FaceSize[] ;
+    }
+  }
+else if (Rind is present) then
+  {
+  if (GridLocation = Vertex) or (GridLocation is absent) then
+    {
+    DataSize[] = VertexSize[] + [a + b,...] ;
+    }
+  else if (GridLocation = CellCenter)
+    {
+    DataSize[] = CellSize[] + [a + b,...] ;
+    }
+  else if (GridLocation = FaceCenter) and              /* new */
+          (zone has complete NGON face coverage) then
+    {
+    DataSize[] = FaceSize[] + [a + b,...] ;
+    }
+  }
 \end{lstlisting}
+
+Here \texttt{FaceSize[]} is defined as
+$E_{\mathrm{end}} - E_{\mathrm{start}} + 1$ for the zone's contiguous
+\texttt{NGON\_n} block (Section~\ref{sec:definition}), and
+\texttt{RindPlanes = [a,b,...]} as in the existing definition. The name
+\texttt{FaceSize[]}, rather than \texttt{NFace[]}, is chosen to avoid
+confusion with \texttt{NFACE\_n} cell counts.
+
+Note that \S12.4 requires no matching \texttt{DataSize[]} amendment: the
+SIDS defines \texttt{DiscreteData\_t}'s \texttt{DataSize[]} by reference
+--- ``It is identical to the function \texttt{DataSize[]} defined for
+\texttt{FlowSolution\_t}'' --- so the change above propagates to
+\texttt{DiscreteData\_t} automatically. Only the \S12.4 \emph{Note}
+(Section~\ref{sec:discretedata-redline}) needs its own redline.
 
 \subsection{MLL Changes}
 \label{sec:mll}
 
 \subsubsection{New internal helper}
+\label{sec:mll_helper}
 
 \begin{lstlisting}[language=C]
 /* cgns_internals.c */
 int cgi_zone_ngon_face_range(cgns_zone *zone,
                               cgsize_t *start, cgsize_t *end);
     /* Returns CG_OK and the contiguous [start,end] face range if the
-     * zone has complete NGON face coverage per Sec. 4.2; returns
+     * zone has complete NGON face coverage per the definition in
+     * this document's Detailed Description section; returns
      * CG_NODE_NOT_FOUND if the zone has no NGON_n sections at all;
      * returns CG_ERROR (with cgi_error() detail) if NGON_n sections
      * exist but coverage is not complete (gaps, or mixed with
-     * classical 2-D face-bearing sections). */
+     * classical 2-D face-bearing sections). The cgi_error() message
+     * names the zone and, for the gap case, the interrupting section
+     * (e.g. "zone 'fluid_zone': NGON_n sections [1,20] and [31,50]
+     * are not contiguous (elements 21-30 belong to section 'Mixed'"),
+     * so the failure is diagnosable without re-deriving element
+     * ranges by hand. Rejects (CG_ERROR) any ElementRange with
+     * start < 1 or end < start, and any face count that would
+     * overflow cgsize_t arithmetic in the caller's size computation,
+     * before returning -- both ranges are read from the file and
+     * must not be trusted blindly. */
 \end{lstlisting}
 
 This helper is used by \texttt{cg\_sol\_write}/\texttt{cg\_field\_write}
@@ -592,33 +678,72 @@ This helper is used by \texttt{cg\_sol\_write}/\texttt{cg\_field\_write}
 with no accompanying point set, to (a)~confirm the relaxation applies and
 (b)~compute the expected \texttt{DataArray\_t} size for validation on
 write, exactly as \texttt{CellSize[]} is already used for
-\texttt{CellCenter}.
+\texttt{CellCenter}. Coverage is a property of the zone's
+\texttt{Elements\_t} section layout, already resident in memory as
+\texttt{zone->section[]}; the reference implementation computes it once
+per zone (caching the result on \texttt{cgns\_zone}) rather than
+re-scanning the section list on every \texttt{cg\_field\_write} call to a
+multi-field \texttt{FaceCenter} solution, and invalidates the cached
+result on \texttt{cg\_section\_write}/\texttt{cg\_section\_partial\_write}.
 
-\subsubsection{Fix: \texttt{cg\_sol\_write} allow-list}
-
-The existing allow-list (Section~\ref{sec:cg_sol_write_gap}) is extended
-to include \texttt{FaceCenter} unconditionally (it is already accepted
-downstream by \texttt{cgi\_check\_location} for
-\texttt{CellDimension~$\geq$~3}; only the local check in
-\texttt{cg\_sol\_write} was overly strict):
+A thin public wrapper is also added, so that reader-side code (as in
+Example~\ref{sec:example3}) does not have to reimplement the coverage
+predicate independently for every downstream tool:
 
 \begin{lstlisting}[language=C]
-if (location != CGNS_ENUMV(Vertex) &&
-    location != CGNS_ENUMV(CellCenter) &&
-    location != CGNS_ENUMV(FaceCenter) &&      /* added */
-    location != CGNS_ENUMV(IFaceCenter) &&
-    location != CGNS_ENUMV(JFaceCenter) &&
-    location != CGNS_ENUMV(KFaceCenter)) {
-    cgi_error("Given grid location not supported for FlowSolution_t");
-    return CG_ERROR;
-}
+/* cgnslib.c; public API */
+int cg_zone_ngon_face_range(int fn, int B, int Z,
+                             cgsize_t *start, cgsize_t *end);
+    /* Thin wrapper over cgi_zone_ngon_face_range() for read-side
+     * consumers. Same return-value contract. */
 \end{lstlisting}
 
-This fix is independent of the rest of this CPEX (it does not by itself
-relax Note~5) but is required in order for
-Section~\ref{sec:examples}'s single-call write example to work; without
-it, applications must still fall back to the two-step
-\texttt{cg\_sol\_write}~+~\texttt{cg\_gridlocation\_write} sequence.
+\subsubsection{Fix: \texttt{cg\_sol\_write} allow-list}
+\label{sec:mll_sol_write_fix}
+
+Rather than add \texttt{FaceCenter} as one more literal in
+\texttt{cg\_sol\_write}'s local allow-list, the reference implementation
+\emph{removes} that allow-list and delegates to
+\texttt{cgi\_check\_location()} --- the same dimension- and zone-type-aware
+check that \texttt{cg\_gridlocation\_write} and \texttt{cg\_sol\_ptset\_write}
+already trust, and the reason those two entry points already accept
+\texttt{FaceCenter} correctly today while \texttt{cg\_sol\_write} does not.
+\texttt{cg\_sol\_write}'s own literal allow-list and its separate,
+hand-written \texttt{[IJK]FaceCenter}/\texttt{Structured}-only check
+are two independent copies of a rule \texttt{cgi\_check\_location} already
+enforces; keeping both is exactly the kind of duplication that let them
+drift apart and produced this bug in the first place. Because
+\texttt{cgi\_check\_location} needs the zone's \texttt{CellDimension} and
+\texttt{ZoneType\_t}, the check must move to \emph{after} the zone lookup
+(\texttt{cg\_sol\_write} currently validates \texttt{location} before
+\texttt{cgi\_get\_file}/\texttt{cgi\_get\_zone} are called):
+
+\begin{lstlisting}[language=C]
+/* was: a literal allow-list checked before the zone lookup, plus a
+ * separate structured-only [IJK]FaceCenter check further down. Both
+ * are replaced by one delegated call, placed after the zone lookup: */
+zone = cgi_get_zone(cg, B, Z);
+if (zone == 0) return CG_ERROR;
+if (cgi_check_location(cg->base[B-1].cell_dim, zone->type, location))
+    return CG_ERROR;   /* cgi_check_location has already set cgi_error() */
+\end{lstlisting}
+
+This is strictly additive in effect: every \texttt{location} value
+previously accepted by the old allow-list is still accepted (each is one
+of \texttt{cgi\_check\_location}'s \texttt{CG\_OK} cases), plain
+\texttt{FaceCenter} is now accepted for \texttt{CellDimension~$\geq$~3}
+regardless of zone type (matching what \texttt{cg\_gridlocation\_write}
+already permits today), and \texttt{[IJK]FaceCenter} on a non-\texttt{Structured}
+zone is still rejected, with the same error message, by
+\texttt{cgi\_check\_location} itself. This fix is independent of the rest
+of this CPEX (it does not by itself relax Note~5) but is required in order
+for Example~\ref{sec:example2}'s single-call write to work; without it,
+applications must still fall back to the two-step
+\texttt{cg\_sol\_write}~+~\texttt{cg\_gridlocation\_write} sequence for the
+point-set-free form. Being a narrowly-scoped, independently testable bug
+fix with no dependency on the NGON-coverage logic, it can land as its own
+patch against the current release line without waiting on the rest of
+this CPEX; see the note in Section~\ref{sec:api-summary}.
 
 \subsubsection{Fix: \texttt{cgnscheck} point-set-aware sizing}
 
@@ -655,7 +780,7 @@ byte level.
   (\texttt{TRI\_3}/\texttt{QUAD\_4}/\ldots). See
   Section~\ref{sec:definition}.
 \item \textbf{Not addressed:} \texttt{ZoneSubRegion\_t}, \texttt{BC\_t}.
-  See discussion at the end of Section~4.4.
+  See Section~\ref{sec:zonesubregion-scope}.
 \item \textbf{Not required:} no change to \texttt{NFACE\_n}'s own
   definition, or to how \texttt{CellCenter} is already handled; both are
   unaffected and serve as the existing precedent this CPEX generalizes.
@@ -663,6 +788,7 @@ byte level.
 
 %% ═════════════════════════════════════════════════════════════════════════
 \section{Backward Compatibility}
+\label{sec:backward-compat}
 %% ═════════════════════════════════════════════════════════════════════════
 
 \begin{itemize}[leftmargin=2em]
@@ -714,22 +840,45 @@ byte level.
 
 \item \textbf{Existing writers:} Unaffected. Codes that do not use the
   new implicit form continue to write the explicit point set exactly as
-  before; nothing is deprecated or removed.
+  before; nothing is deprecated or removed. \emph{Today}, this ordering
+  independence is unconditional: \texttt{cg\_field\_write} branches on
+  whether a point set is already attached to the solution at the moment
+  \emph{it} is called (\texttt{sol->ptset == NULL}), and writing a
+  \texttt{FaceCenter} field before any point set exists already fails on
+  an unstructured zone (no implicit sizing rule exists yet), so no
+  existing writer can depend on a field-before-point-set ordering. This
+  CPEX changes that: once implicit sizing exists, a solution written
+  field-first would size against the NGON face count, and a point set
+  added \emph{afterward} would silently reinterpret an
+  already-on-disk array written to a different, incompatible size. The
+  reference implementation must therefore forbid attaching a
+  \texttt{PointList}/\texttt{PointRange} to a \texttt{FlowSolution\_t}/
+  \texttt{DiscreteData\_t} node that already has one or more
+  \texttt{DataArray\_t} children written under implicit sizing --- returning
+  \texttt{CG\_ERROR} from the point-set write call in that case --- rather
+  than silently permitting the reinterpretation. This is a new ordering
+  constraint introduced by this CPEX, not a preexisting one, and should be
+  covered by its own test case (Section~\ref{sec:test-plan}).
 
 \item \textbf{ABI:} No structure layout changes are required beyond the
-  addition of the internal \texttt{cgi\_zone\_ngon\_face\_range()}
-  helper. The public API changes are limited to widening
-  \texttt{cg\_sol\_write}'s accepted \texttt{location} values (already a
-  bug fix independent of this CPEX) and are purely additive in effect
+  addition of the internal \texttt{cgi\_zone\_ngon\_face\_range()} helper
+  and its public wrapper \texttt{cg\_zone\_ngon\_face\_range()}
+  (Section~\ref{sec:mll_helper}). The public API changes are limited to
+  widening \texttt{cg\_sol\_write}'s accepted \texttt{location} values
+  (already a bug fix independent of this CPEX) and adding the new
+  read-side wrapper, and are purely additive in effect
   (previously-rejected input is now accepted; no previously-accepted
-  input is rejected). \textbf{No new public error codes are introduced.}
+  input is rejected; the wrapper is an optional convenience with no
+  existing caller). \textbf{No new public error codes are introduced.}
   A write requesting implicit \texttt{FaceCenter} sizing on a zone that
   lacks complete NGON face coverage returns the existing
   \texttt{CG\_ERROR} (with a \texttt{cgi\_error()} message identifying
   the missing coverage), exactly as an out-of-range \texttt{GridLocation}
-  does today; \texttt{cgi\_zone\_ngon\_face\_range()} itself is an
-  internal helper and its \texttt{CG\_NODE\_NOT\_FOUND}/\texttt{CG\_ERROR}
-  return values are not part of the public API.
+  does today; \texttt{cg\_zone\_ngon\_face\_range()} returns the same
+  \texttt{CG\_OK}/\texttt{CG\_NODE\_NOT\_FOUND}/\texttt{CG\_ERROR}
+  contract as every other existing \texttt{cg\_*\_info}-style read
+  function, so no new return-code semantics are introduced at the public
+  boundary either.
 
 \item \textbf{Parallel I/O (\texttt{cgp\_*}):} Unaffected. The relaxation
   changes only whether a point-set child node must exist; it does not
@@ -743,6 +892,7 @@ byte level.
 %% ═════════════════════════════════════════════════════════════════════════
 
 \subsection{Example 1: Before --- Identity \texttt{PointRange} (current, still valid)}
+\label{sec:example1}
 
 \begin{lstlisting}[language=C]
 int S, F;
@@ -750,31 +900,34 @@ cg_sol_write(fn, B, Z, "CellData", CGNS_ENUMV(CellCenter), &S);
 cg_field_write(fn, B, Z, S, CGNS_ENUMV(RealDouble), "Pressure",
                pressure, &F);
 
-/* FaceCenter solution requires the two-step dance today, plus an
- * explicit identity PointRange matching the NGON ElementRange. */
-cg_sol_write(fn, B, Z, "FaceData", CGNS_ENUMV(CellCenter), &S);
-cg_gridlocation_write(fn, B, Z, S, CGNS_ENUMV(FaceCenter));
-cgsize_t range[2] = {1, 36};   /* must be kept in sync with NGonElements
-                                   ElementRange by hand */
-cg_ptset_write(fn, B, Z, S, CGNS_ENUMV(PointRange), 2, range);
+/* FaceCenter WITH an explicit point set already works today in one
+ * call via cg_sol_ptset_write -- the gap this CPEX's reference
+ * implementation fixes (see Existing Implementation Gaps, above) is
+ * specifically the point-set-FREE form below, not this one. The
+ * identity PointRange must still be kept in sync with NGonElements'
+ * ElementRange by hand. */
+cgsize_t range[2] = {1, 36};
+cg_sol_ptset_write(fn, B, Z, "FaceData", CGNS_ENUMV(FaceCenter),
+                   CGNS_ENUMV(PointRange), 2, range, &S);
 cg_field_write(fn, B, Z, S, CGNS_ENUMV(RealDouble), "NormalX",
                normal_x, &F);
 \end{lstlisting}
 
 \subsection{Example 2: After --- Implicit \texttt{FaceCenter} (this CPEX)}
+\label{sec:example2}
 
 \begin{lstlisting}[language=C]
 int S, F;
 
-/* FaceCenter now accepted directly by cg_sol_write (Sec. 5.4.2);
- * no PointRange needed -- the zone's NGonElements section already
- * defines the face numbering. */
+/* FaceCenter now accepted directly by cg_sol_write (fix described in
+ * this CPEX's MLL Changes section); no PointRange needed -- the
+ * zone's NGonElements section already defines the face numbering. */
 cg_sol_write(fn, B, Z, "FaceData", CGNS_ENUMV(FaceCenter), &S);
 cg_field_write(fn, B, Z, S, CGNS_ENUMV(RealDouble), "NormalX",
                normal_x, &F);   /* size validated against NGON face count */
 \end{lstlisting}
 
-Resulting tree (compare to Section~2's example):
+Resulting tree (compare to the example in Section~\ref{sec:problem-statement}):
 
 \begin{lstlisting}[language=C]
 fluid_zone Zone_t [[27  8  0]]
@@ -792,21 +945,57 @@ fluid_zone Zone_t [[27  8  0]]
                                     NGonElements, no PointRange node */
 \end{lstlisting}
 
+The MLL's Fortran bindings (\texttt{cg\_sol\_write\_f}, \texttt{cg\_field\_write\_f})
+forward the same \texttt{location} argument through the same validation as
+their C counterparts, so both the \texttt{cg\_sol\_write} allow-list fix
+and this CPEX's implicit-sizing behavior are directly visible to Fortran
+callers, who make up a substantial share of CGNS writers. The Fortran
+mirror of Example~\ref{sec:example2}:
+
+\begin{lstlisting}[language=Fortran]
+integer :: S, F, ier
+
+! FaceCenter now accepted directly by cg_sol_write_f; no PointRange
+! needed -- the zone's NGonElements section defines the numbering.
+call cg_sol_write_f(fn, B, Z, 'FaceData', FaceCenter, S, ier)
+if (ier .ne. CG_OK) call cg_error_exit_f()
+call cg_field_write_f(fn, B, Z, S, RealDouble, 'NormalX', &
+                      normal_x, F, ier)
+if (ier .ne. CG_OK) call cg_error_exit_f()
+\end{lstlisting}
+
 \subsection{Example 3: Reading --- Dispatching on Coverage}
+\label{sec:example3}
 
 \begin{lstlisting}[language=C]
+char name[33];
 CGNS_ENUMT(GridLocation_t) loc;
 CGNS_ENUMT(PointSetType_t) ptype;
-cgsize_t npnts;
+cgsize_t npnts, fstart, fend;
 
-cg_sol_info(fn, B, Z, S, name, &loc);
-int has_ptset = (cg_ptset_info(&ptype, &npnts) == CG_OK);
+if (cg_sol_info(fn, B, Z, S, name, &loc)) return handle_error();
+
+/* cg_sol_ptset_info addresses solution S directly and reports "no
+ * point set" as CG_OK with ptype == PointSetTypeNull -- unlike the
+ * cg_goto-positioned cg_ptset_info, it needs no prior cg_goto call,
+ * and a real read failure is distinguishable from "point set absent". */
+if (cg_sol_ptset_info(fn, B, Z, S, &ptype, &npnts)) return handle_error();
+int has_ptset = (ptype != CGNS_ENUMV(PointSetTypeNull));
 
 if (loc == CGNS_ENUMV(FaceCenter) && !has_ptset) {
-    /* Implicit form (this CPEX): spans every NGON face by
-     * construction. No PointRange to compare against the face
-     * count -- the check this CPEX was written to eliminate. */
-    process_all_faces(fn, B, Z, S);
+    /* Node shape alone (FaceCenter, no point set) is necessary but
+     * NOT sufficient: a pre-CPEX-0051 or non-conformant file can
+     * present this same shape without complete NGON coverage. Verify
+     * before trusting it -- this CPEX makes the check cheap, not
+     * optional, which is why cg_zone_ngon_face_range is public. */
+    if (cg_zone_ngon_face_range(fn, B, Z, &fstart, &fend) != CG_OK) {
+        /* Claims the implicit form but coverage doesn't hold:
+         * non-conformant file. Fail safely rather than guessing a
+         * size -- this is the "silently misreads the data" failure
+         * mode Section 4 warns against. */
+        return handle_nonconformant_file(fn, B, Z, S);
+    }
+    process_all_faces(fn, B, Z, S, fend - fstart + 1);
 } else if (loc == CGNS_ENUMV(FaceCenter) && has_ptset) {
     /* Explicit form: a genuine subset, or a pre-CPEX-0051 file. */
     process_face_subset(fn, B, Z, S, ptype, npnts);
@@ -814,25 +1003,27 @@ if (loc == CGNS_ENUMV(FaceCenter) && !has_ptset) {
 \end{lstlisting}
 
 \subsection{Example 4: Rejected --- Non-Contiguous NGON\_n Sections}
+\label{sec:example4}
 
 \begin{lstlisting}[language=C]
 /* Zone has TWO NGON_n sections separated by an unrelated section,
  * e.g. ElementRange [1,20] (NGON_n), [21,30] (some other type),
- * [31,50] (NGON_n). Condition 2 of Sec. 4.2 is violated: the NGON_n
- * ranges do not form a single contiguous block, so there is no
- * well-defined [E_start, E_end] to index against. The explicit
- * point set is still required.
+ * [31,50] (NGON_n). Condition 2 of the coverage definition is
+ * violated: the NGON_n ranges do not form a single contiguous block,
+ * so there is no well-defined [E_start, E_end] to index against. The
+ * explicit point set is still required.
  *
  * Note: a zone with an NGON_n section PLUS a separate boundary-patch
  * QUAD_4 section OUTSIDE the NGON_n range (e.g. ElementRange [1,36]
  * NGON_n, [37,44] QUAD_4 for BC_t) is fine and DOES qualify -- see
- * Sec. 4.2's revised Condition 2 and Example 5. */
+ * the coverage definition's revised Condition 2 and Example 5 below. */
 cg_sol_write(fn, B, Z, "FaceData", CGNS_ENUMV(FaceCenter), &S);
 /* cg_field_write size-validation falls back to requiring an
  * explicit PointList/PointRange, and cgnscheck flags its absence. */
 \end{lstlisting}
 
 \subsection{Example 5: Accepted --- NGON\_n Coexisting with a Boundary-Patch Section}
+\label{sec:example5}
 
 \begin{lstlisting}[language=C]
 /* Zone has an NGON_n section [1,36] covering every face, PLUS a
@@ -851,12 +1042,17 @@ cg_field_write(fn, B, Z, S, CGNS_ENUMV(RealDouble), "NormalX",
 %% ═════════════════════════════════════════════════════════════════════════
 
 \begin{itemize}[leftmargin=2em]
-\item \S7.7 \texttt{FlowSolution\_t}, Note~5: amended (Section~4.3).
+\item \S7.7 \texttt{FlowSolution\_t}, Note~5: amended
+  (Section~\ref{sec:flowsolution-redline}).
 \item \S7.7 \texttt{FlowSolution\_t}, \texttt{DataSize[]} function:
   amended (Section~\ref{sec:datasize}).
 \item \S12.4 \texttt{DiscreteData\_t}, equivalent Note: amended
-  (Section~4.4), including its own \texttt{DataSize[]}-equivalent
-  language, mirrored from \S7.7.
+  (Section~\ref{sec:discretedata-redline}). No \texttt{DataSize[]}
+  amendment is needed in \S12.4 itself: the SIDS defines
+  \texttt{DiscreteData\_t}'s \texttt{DataSize[]} by reference (``It is
+  identical to the function \texttt{DataSize[]} defined for
+  \texttt{FlowSolution\_t}''), so the \S7.7 change propagates
+  automatically (Section~\ref{sec:datasize}).
 \item \S7.3 \texttt{Elements\_t}: unchanged. This CPEX relies entirely
   on the existing global-numbering and ``\texttt{NGON\_n} specifies all
   faces'' guarantees already stated there (Section~\ref{sec:why-ngon});
@@ -873,6 +1069,72 @@ None. This CPEX changes only which combinations of existing nodes are
 considered conformant; it introduces no new HDF5/ADF on-disk structures,
 attributes, or data types. The ADFH and ADF file-mapping documents
 require no amendment.
+
+%% ═════════════════════════════════════════════════════════════════════════
+\section{Test Plan}
+\label{sec:test-plan}
+%% ═════════════════════════════════════════════════════════════════════════
+
+The reference implementation's test suite must cover at least the
+following fixtures. Items~1--5 exercise the coverage predicate and the
+new sizing rule directly; items~6--7 pin down behavior this CPEX makes
+newly reachable and that would otherwise be left implicit; item~8 guards
+the one existing entry point this CPEX widens.
+
+\begin{enumerate}[leftmargin=2em]
+\item Single \texttt{NGON\_n} section, implicit form
+  (Example~\ref{sec:example2}): round-trip write, read, and
+  \texttt{cgnscheck} clean (zero errors) in both C and Fortran (Fortran
+  mirror of Example~\ref{sec:example2}).
+\item Multiple contiguous \texttt{NGON\_n} sections partitioning one
+  \texttt{[E\_start, E\_end]} block: accepted, sized correctly.
+\item Gap case (Example~\ref{sec:example4}): write of a solution
+  requesting implicit sizing is rejected with \texttt{CG\_ERROR}; a file
+  constructed to have this shape externally is flagged by
+  \texttt{cgnscheck} and by \texttt{cg\_zone\_ngon\_face\_range()}
+  returning \texttt{CG\_ERROR} on read.
+\item Boundary-patch coexistence (Example~\ref{sec:example5}): accepted.
+  This is new behavior with no installed base to regress against, so it
+  carries the highest regression value of any fixture here --- it was a
+  deliberate relaxation from an earlier draft of this CPEX
+  (Section~\ref{sec:definition}) and deserves its own dedicated test
+  rather than incidental coverage from another fixture.
+\item Legacy identity-\texttt{PointRange} file
+  (Example~\ref{sec:example1}): still passes, unchanged size, confirming
+  the explicit-point-set branch of \texttt{DataSize[]} retains precedence
+  over the new implicit branch.
+\item Point-set-written-after-implicit-fields ordering: attempt to attach
+  a \texttt{PointRange}/\texttt{PointList} to a \texttt{FlowSolution\_t}
+  that already holds fields written under implicit NGON sizing; must
+  return \texttt{CG\_ERROR} per the rule in
+  Section~\ref{sec:backward-compat}. This behavior is otherwise
+  undefined by the prose alone; the test is what pins it down.
+\item Malformed \texttt{ElementRange} inputs to
+  \texttt{cgi\_zone\_ngon\_face\_range()}: \texttt{start~<~1},
+  \texttt{end~<~start}, and (on a 32-bit \texttt{cgsize\_t} build) a range
+  whose face count overflows subsequent size arithmetic --- all three
+  must return \texttt{CG\_ERROR} before any allocation is attempted
+  downstream (Section~\ref{sec:mll_helper}).
+\item Structured zone with plain \texttt{FaceCenter} through the fixed
+  \texttt{cg\_sol\_write} (Section~\ref{sec:mll_sol_write_fix}): must
+  still be accepted for \texttt{CellDimension~$\geq$~3} (matching
+  \texttt{cg\_gridlocation\_write}'s existing behavior) and rejected
+  below that, pinning down the delegated-\texttt{cgi\_check\_location}
+  behavior in both directions.
+\end{enumerate}
+
+\textbf{Note on \texttt{cgnscheck} regression risk.} Once
+\texttt{get\_data\_size()} is fixed to honor an explicit point set
+(Section~\ref{sec:cgnscheck_gap}), files that previously produced a
+false-positive \texttt{ERROR:} for \emph{any} reason unrelated to
+sizing will, for the first time, actually have their declared array size
+checked against \texttt{ListLength[]}. Any existing file whose
+\texttt{FlowSolution\_t} array size does not genuinely match its point
+set's \texttt{ListLength} --- previously masked by the unconditional
+unstructured-zone bailout --- will newly and correctly fail. This is the
+widest legacy-system ripple in this proposal: it is a correctness fix,
+not a regression, but should be called out explicitly in \texttt{cgnscheck}
+release notes so it is not mistaken for one.
 
 %% ═════════════════════════════════════════════════════════════════════════
 \section{Design Decisions}
@@ -915,7 +1177,7 @@ already relies on for \texttt{CellCenter}. This is the design adopted by
 this CPEX.
 
 \subsection{On Scope: Why Not Also Amend \texttt{ZoneSubRegion\_t}?}
-\label{sec:open-questions}
+\label{sec:zonesubregion-scope}
 
 \texttt{ZoneSubRegion\_t} (\S7.9) shares CPEX~0031 ancestry with
 \texttt{FlowSolution\_t} and \texttt{DiscreteData\_t}, but it always
@@ -927,6 +1189,7 @@ committee rather than folded into this proposal's scope.
 
 %% ═════════════════════════════════════════════════════════════════════════
 \section{Open Questions}
+\label{sec:open-questions}
 %% ═════════════════════════════════════════════════════════════════════════
 
 \begin{enumerate}[leftmargin=2em]
@@ -940,7 +1203,7 @@ committee rather than folded into this proposal's scope.
   or a plain \texttt{CGNSLibraryVersion\_t} bump? This CPEX assumes
   whichever mechanism is current SIDS practice at the time of adoption
   and does not mandate a specific one.
-\item CPEX~0050 (\texttt{DofStorage\_t}), Example~4, already writes a
+\item \label{item:cpex0050-dependency} CPEX~0050 (\texttt{DofStorage\_t}), Example~4, already writes a
   \texttt{FaceCenter} \texttt{TraceSolution} via a single
   \texttt{cg\_sol\_write} call with no accompanying point set, for a
   zone implied to have \texttt{NGON\_n} coverage. That example is only
@@ -954,24 +1217,42 @@ committee rather than folded into this proposal's scope.
 
 %% ═════════════════════════════════════════════════════════════════════════
 \section{Summary of API Additions}
+\label{sec:api-summary}
 %% ═════════════════════════════════════════════════════════════════════════
 
+The two implementation gaps from Section~\ref{sec:implementation-gaps}
+(\texttt{cg\_sol\_write}'s allow-list, and \texttt{cgnscheck}'s missing
+point-set read) are pre-existing bugs, independent of the NGON-coverage
+logic itself, and do not need to wait on this CPEX's SIDS-level
+relaxation or on \texttt{v5.0.0}. They can and should land as standalone
+patches against the current release line as soon as they are reviewed;
+this CPEX's reference implementation only \emph{depends on} them, so that
+Example~\ref{sec:example2}'s single-call write works end to end.
+
+\nolinenumbers
+\begingroup
+\renewcommand{\arraystretch}{1.5}
 \begin{center}
 \rowcolors{2}{cgnslight!30}{white}
-\begin{tabular}{l l}
+\begin{tabular}{@{} l >{\raggedright\arraybackslash}p{0.5\textwidth} l @{}}
 \toprule
 \rowcolor{cgnsblue!15}
-\textbf{Symbol} & \textbf{Change} \\
+\textbf{Symbol} & \textbf{Change} & \textbf{Release} \\
 \midrule
-\texttt{cgi\_zone\_ngon\_face\_range()} & New internal helper (Sec.~\ref{sec:mll}) \\
-\texttt{cg\_sol\_write}                 & Accepts \texttt{FaceCenter} directly (bug fix) \\
-\texttt{cg\_discrete\_write}            & Same fix, mirrored \\
-\texttt{get\_data\_size()} (cgnscheck)  & Point-set- and NGON-aware sizing (bug fix) \\
+\texttt{cg\_sol\_write} & Delegates location check to \texttt{cgi\_check\_location}, accepting \texttt{FaceCenter} directly (Sec.~\ref{sec:mll_sol_write_fix}) & any (backportable) \\
+\texttt{cg\_discrete\_write} & Same fix, mirrored & any (backportable) \\
+\texttt{get\_data\_size()} (cgnscheck) & Point-set-aware sizing (Sec.~\ref{sec:cgnscheck_gap}) & any (backportable) \\
+\midrule
+\texttt{cgi\_zone\_ngon\_face\_range()} & New internal helper (Sec.~\ref{sec:mll_helper}) & v5.0.0 (this CPEX) \\
+\texttt{cg\_zone\_ngon\_face\_range()} & New public wrapper, read-side coverage check (Sec.~\ref{sec:mll_helper}) & v5.0.0 (this CPEX) \\
 \bottomrule
 \end{tabular}
 \end{center}
+\endgroup
+\linenumbers
 
-No new public enumerations, structs, or function signatures are
+Aside from the new public \texttt{cg\_zone\_ngon\_face\_range()} wrapper,
+no new public enumerations, structs, or function signatures are
 introduced; \texttt{FaceCenter} already exists in
 \texttt{GridLocation\_t}.
 
@@ -984,8 +1265,8 @@ introduced; \texttt{FaceCenter} already exists in
 \item CGNS SIDS, \S7.7 \texttt{FlowSolution\_t} (Notes and \texttt{DataSize[]} function).
 \item CGNS SIDS, \S12.4 \texttt{DiscreteData\_t}.
 \item CGNS SIDS Changelog, Version~3.1 (CPEX~0031: PointList/PointRange revamp; \texttt{NGON\_n}/\texttt{NFACE\_n} formalization).
-\item CPEX~0049, CGNS Compatibility Version Control (version-gating mechanism referenced in Section~6).
-\item CPEX~0050, DOF Storage Type (Example~4 dependency noted in Section~9.4).
+\item CPEX~0049, CGNS Compatibility Version Control (version-gating mechanism referenced in Section~\ref{sec:backward-compat}).
+\item CPEX~0050, DOF Storage Type (Example~4 dependency noted in Open Question~\ref{item:cpex0050-dependency}, Section~\ref{sec:open-questions}).
 \item S.~Allmaras, ``Face-Based Proposal'' (2005-era precursor discussion of face-based unstructured storage, predating standardized \texttt{NGON\_n}/\texttt{NFACE\_n}).
 \end{enumerate}
 
