@@ -1,0 +1,992 @@
+\documentclass[11pt,letterpaper]{article}
+
+%% ── Packages ──────────────────────────────────────────────────────────────
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=1.5in]{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{colortbl}
+\usepackage{parskip}
+\usepackage{microtype}
+\usepackage{hyphenat}
+\setlength{\emergencystretch}{3em}
+\usepackage{needspace}
+\usepackage[right,running]{lineno}
+
+%% ── Suppress lineno inside code listings ────────────────────────────────
+\makeatletter
+\let\cgns@orig@lstlisting\lstlisting
+\let\cgns@endorig@lstlisting\endlstlisting
+\renewenvironment{lstlisting}
+  {\par\needspace{5\baselineskip}\nolinenumbers\cgns@orig@lstlisting}
+  {\cgns@endorig@lstlisting\par\linenumbers}
+\makeatother
+
+%% ── Color palette ───────────────────────────────────────────────────────
+\definecolor{cgnsblue}{HTML}{1F4E79}
+\definecolor{cgnsteal}{HTML}{2E7D8C}
+\definecolor{cgnslight}{HTML}{D6EAF0}
+\definecolor{cgnsgold}{HTML}{C78C1C}
+
+%% ── Hyperlink style ──────────────────────────────────────────────────────
+\hypersetup{
+  colorlinks=true,
+  linkcolor=cgnsblue,
+  urlcolor=cgnsteal,
+  citecolor=cgnsblue,
+}
+
+%% ── Code listing style ──────────────────────────────────────────────────
+\lstset{
+  basicstyle=\scriptsize\ttfamily,
+  keywordstyle=\bfseries\color{cgnsblue},
+  commentstyle=\itshape\color{cgnsteal},
+  stringstyle=\color{red!60!black},
+  breaklines=true,
+  frame=single,
+  framerule=0.5pt,
+  rulecolor=\color{cgnsblue!40},
+  backgroundcolor=\color{cgnslight!30},
+  numbers=left,
+  numberstyle=\tiny\color{cgnsblue!50},
+  numbersep=6pt,
+  showstringspaces=false,
+  xleftmargin=1em,
+  xrightmargin=1em,
+  aboveskip=1em,
+  belowskip=1em,
+  tabsize=4,
+}
+
+%% ── SIDS-style node definition environment ──────────────────────────────
+\newenvironment{sidsnode}[1]{%
+  \par\vspace{0.8em}%
+  \noindent\colorbox{cgnslight!50}{\makebox[\dimexpr\linewidth-2\fboxsep][l]{%
+    \texttt{\textbf{\color{cgnsblue}#1}}}}\\[0.3em]%
+  \begin{quote}\ttfamily
+}{%
+  \end{quote}\vspace{0.4em}%
+}
+
+%% ── Redline environments (SIDS text diff) ────────────────────────────────
+\newenvironment{sidsold}{%
+  \par\vspace{0.6em}\noindent
+  \begin{quote}\color{black!55}\ttfamily\small\itshape
+}{%
+  \end{quote}\vspace{-0.2em}
+}
+\newenvironment{sidsnew}{%
+  \par\noindent
+  \begin{quote}\color{cgnsblue!85}\ttfamily\small\bfseries
+}{%
+  \end{quote}\vspace{0.6em}
+}
+
+%% ── Header / Footer ────────────────────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\color{cgnsblue} CPEX 0051 --- Implicit FaceCenter Indexing for NGON Zones}
+\fancyhead[R]{\small\color{cgnsblue} Version 1.2}
+\fancyfoot[C]{\small\color{cgnsblue}\thepage}
+\renewcommand{\headrulewidth}{0.5pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{cgnsgold}\leaders\hrule height\headrulewidth\hfill}}
+\renewcommand{\footrulewidth}{0pt}
+
+%% ── Title Formatting ───────────────────────────────────────────────────
+\titleformat{\section}{\Large\bfseries\color{cgnsblue}}{\thesection}{0.6em}{}[\vspace{0.2em}{\color{cgnsgold}\titlerule[0.8pt]}]
+\titleformat{\subsection}{\large\bfseries\color{cgnsblue!85}}{\thesubsection}{0.6em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries\color{cgnsteal}}{\thesubsubsection}{0.6em}{}
+
+%% =====================================================================
+\begin{document}
+\linenumbers
+
+%% ── Title Block ─────────────────────────────────────────────────────────
+\begin{center}
+  \includegraphics[width=0.25\textwidth]{CGNS_logo_1.png}\\[1.2em]
+  {\LARGE\bfseries\color{cgnsblue} CGNS Proposal for Extension 0051}\\[0.6em]
+  {\Large\color{cgnsteal} Implicit FaceCenter Indexing for NGON-Based Unstructured Zones}\\[0.4em]
+  {\color{cgnsgold}\rule{0.4\textwidth}{0.8pt}}\\[0.6em]
+  {\large Version 1.2}\\[0.6em]
+  \today
+\end{center}
+
+\vspace{1em}
+
+%% ── Metadata Table ──────────────────────────────────────────────────────
+\noindent
+\rowcolors{2}{cgnslight!30}{white}
+\begin{tabular}{@{} >{\bfseries\color{cgnsblue}}l l @{}}
+\toprule
+CPEX\#           & 0051 \\
+Scope            & Drop the \texttt{PointList}/\texttt{PointRange} requirement for \\
+                 & \texttt{FaceCenter} data on complete \texttt{NGON\_n} zones \\
+Champion         & M.\ Scot Breitenfeld \\
+Organization     & The HDF Group \\
+E-mail           & \href{mailto:brtnfld@hdfgroup.org}{brtnfld@hdfgroup.org} \\
+GitHub Issue     & TBD (implementation gaps tracked as \\
+                 & \href{https://github.com/CGNS/CGNS/issues/964}{\#964}, \href{https://github.com/CGNS/CGNS/issues/965}{\#965}) \\
+Reference Impl.  & TBD \\
+Target Release   & CGNS v5.0.0 (major release) \\
+Date First Posted & \today \\
+SIDS Status      & proposed \\
+Filemap Status   & proposed \\
+MLL Status       & proposed \\
+\bottomrule
+\end{tabular}
+
+\vspace{1.5em}
+
+\tableofcontents
+\newpage
+
+%% ═════════════════════════════════════════════════════════════════════════
+\section{Abstract}
+%% ═════════════════════════════════════════════════════════════════════════
+
+SIDS Section~7.7 (\texttt{FlowSolution\_t}), Note~5, states that for
+unstructured zones \texttt{GridLocation} is restricted to \texttt{Vertex}
+or \texttt{CellCenter} unless a \texttt{PointList} or \texttt{PointRange}
+is also present. The same restriction appears, near word-for-word, in
+Section~12.4 (\texttt{DiscreteData\_t}). This forces every \texttt{FaceCenter}
+solution on an unstructured zone to carry an explicit point set --- even
+when the data spans literally every face in the zone, in which case the
+point set is the identity permutation and conveys no information beyond
+what is already implied by the zone's own element numbering.
+
+For zones whose faces are described by \texttt{NGON\_n} elements, this
+identity point set is redundant: SIDS Section~7.3 already guarantees that
+\texttt{NGON\_n} elements ``specify all the faces in the grid,'' giving
+faces the same kind of complete, contiguous, globally unique numbering
+that cells already have --- which is precisely why \texttt{CellCenter}
+never needed a \texttt{PointList}/\texttt{PointRange} in the first place.
+
+This CPEX proposes a narrow, precisely scoped relaxation: when an
+unstructured zone has \emph{complete NGON face coverage} (defined in
+Section~\ref{sec:definition}), \texttt{GridLocation~=~FaceCenter} data may
+be written and read \emph{without} a \texttt{PointList}/\texttt{PointRange},
+indexed directly against the zone's \texttt{NGON\_n} element numbering,
+exactly as \texttt{CellCenter} is indexed against the zone's
+\texttt{CellDimension}-order elements. The relaxation is strictly additive:
+files using the existing identity-point-set workaround remain fully
+conformant, and the change is scoped to \texttt{NGON\_n} coverage only ---
+it explicitly does \emph{not} extend to classical 2-D element sections
+(\texttt{TRI\_3}, \texttt{QUAD\_4}, \ldots), which are conventionally used
+for boundary patches only and do not carry SIDS's ``all faces'' guarantee.
+
+While researching the current behavior, two independent implementation
+gaps were found that this CPEX's reference implementation also addresses:
+\texttt{cg\_sol\_write} cannot create a \texttt{FaceCenter}-located
+solution directly (Section~\ref{sec:cg_sol_write_gap}), and
+\texttt{cgnscheck} never reads a \texttt{FlowSolution\_t}'s
+\texttt{PointList}/\texttt{PointRange} when validating data-array sizes
+(Section~\ref{sec:cgnscheck_gap}), so today's identity-point-set files are
+not actually verifiable by the reference conformance tool.
+
+%% ═════════════════════════════════════════════════════════════════════════
+\section{Motivation and Rationale}
+%% ═════════════════════════════════════════════════════════════════════════
+
+\subsection{Problem Statement}
+
+A common CFD data-storage need is a quantity defined on \emph{every} face
+of an unstructured mesh (e.g., face-normal velocities, surface fluxes on
+all element boundaries). For a zone built from \texttt{NFACE\_n}/\texttt{NGON\_n}
+polyhedral connectivity, the following tree is representative:
+
+\begin{lstlisting}[language=C]
+fluid_zone Zone_t [[27  8  0]]
++---ZoneType ZoneType_t "Unstructured"
++---NGonElements Elements_t [22  0]
+|   +---ElementRange IndexRange_t [ 1 36]
+|   :
++---NFaceElements Elements_t [23  0]
+|   +---ElementRange IndexRange_t [37 44]
+|   :
++---CellData FlowSolution_t
+|   +---GridLocation GridLocation_t "CellCenter"
+|   +---Pressure DataArray_t   /* 8 values -- no PointList/PointRange */
++---FaceData FlowSolution_t
+    +---GridLocation GridLocation_t "FaceCenter"
+    +---NormalX DataArray_t     /* 36 values */
+    :
+    +---PointRange IndexRange_t [[1, 36]]
+        ^^^^ identity range -- required by Note 5, conveys no new information
+\end{lstlisting}
+
+\texttt{CellData} needs no point set: \texttt{GridLocation~=~CellCenter}
+alone is sufficient, because the zone's cells are already uniquely and
+completely numbered by its volume \texttt{Elements\_t} sections.
+\texttt{FaceData}, however, is required by SIDS Note~5 to carry a
+\texttt{PointRange}, even though \texttt{[1,36]} is exactly the
+\texttt{NGonElements} section's own \texttt{ElementRange} --- information
+the reader already has. Two consequences follow:
+
+\begin{enumerate}[leftmargin=2em]
+\item \textbf{Confusion.} Users and tool authors reasonably ask why an
+  identity point set is mandatory for one \texttt{GridLocation} and
+  forbidden (well, unnecessary) for another, when both are governed by the
+  same element-numbering machinery.
+\item \textbf{Detection cost.} Any code path that wants to special-case
+  ``this solution spans every face'' --- to avoid gather/scatter
+  overhead in a parallel read, for instance --- must first read the point
+  set and compare it against the face count, on every zone, for every
+  solution. This is a small but repeated and entirely avoidable
+  per-solution check.
+\end{enumerate}
+
+\subsection{Origin of the Restriction}
+
+Note~5 was introduced by CPEX~0031 (``revamped usage of \texttt{PointList}
+and \texttt{PointRange}''), incorporated into SIDS~v3.1. The SIDS gives
+its own rationale immediately following the notes list in
+Section~7.7:
+
+\begin{quote}\small\itshape
+``For unstructured grids, the value of \texttt{GridLocation} alone
+specifies location and indexing of flow solution data only for vertex
+and cell-centered data. The reason for this is that element-based grid
+connectivity provided in the \texttt{Elements\_t} data structures
+explicitly indexes only vertices and cells. For data stored at alternate
+grid locations (e.g., edges), additional connectivity information is
+needed. This is provided by the optional fields \texttt{PointRange} and
+\texttt{PointList}\ldots''
+\end{quote}
+
+This is a correct and still-necessary rule for the \emph{general} case:
+an unstructured zone is only ever \emph{required} to number its vertices
+and its \texttt{CellDimension}-order elements. A zone built purely from
+\texttt{TETRA\_4}/\texttt{PYRA\_5}/\texttt{PENTA\_6}/\texttt{HEXA\_8}/
+\texttt{MIXED} sections, with no face-type \texttt{Elements\_t} section
+at all, has no face numbering whatsoever --- \texttt{FaceCenter} is
+genuinely meaningless there without an explicit point set.
+
+Notably, SIDS~v3.1 is also the version in which \texttt{NFACE\_n} was
+formalized and the \texttt{NGON\_n} description was substantially revised
+(per the same changelog entry). The two changes were made in the same
+release but were not cross-referenced: Note~5 was written for, and still
+correctly describes, the general classical-element case, but it was never
+revisited to carve out the \texttt{NGON\_n} case where a complete face
+numbering \emph{is} guaranteed to exist.
+
+\subsection{Why \texttt{NGON\_n} Changes the Picture}
+\label{sec:why-ngon}
+
+SIDS Section~7.3 (\texttt{Elements\_t}) states two facts that together
+give faces the same numbering guarantee that cells already enjoy:
+
+\begin{quote}\small\itshape
+``The elements are indexed with a global numbering system, starting at 1,
+for all element sections under a given \texttt{Zone\_t} data structure.
+The global numbering insures that each element, whether it's a cell, a
+face, or an edge, is uniquely identified by its number. They are also
+listed as a continuous list of element numbers within any single element
+section.''
+\end{quote}
+
+\begin{quote}\small\itshape
+``Arbitrary polyhedral elements may be defined using the \texttt{NGON\_n}
+and \texttt{NFACE\_n} element types. \textbf{The \texttt{NGON\_n} element
+type is used to specify all the faces in the grid}, and the
+\texttt{NFACE\_n} element type is then used to define the polyhedral
+elements as a collection of these faces.''
+\end{quote}
+
+Combined, these two statements mean that whenever a zone's volume cells
+are described with \texttt{NFACE\_n}/\texttt{NGON\_n} connectivity, the
+union of that zone's \texttt{NGON\_n} \texttt{ElementRange}(s) is --- by
+the SIDS's own existing guarantees, with no new machinery required --- a
+complete, contiguous, globally unique numbering of every face in the
+zone. This is structurally identical to how a zone's volume
+\texttt{Elements\_t} sections already give \texttt{CellCenter} an
+implicit, unambiguous numbering.
+
+\subsection{Precedent: \texttt{CellCenter} Already Works This Way}
+
+SIDS Section~7.7 defines the \texttt{DataSize[]} structure function,
+which is the authoritative statement of how \texttt{FlowSolution\_t}
+array sizes are derived. The \texttt{CellCenter} branch already relies
+\emph{entirely} on implicit element-based sizing:
+
+\begin{lstlisting}[language=C]
+if (PointRange/PointList is present) {
+    DataSize[] = ListLength[] ;
+}
+else if (Rind is absent) {
+    if (GridLocation = Vertex) or (GridLocation is absent)
+        DataSize[] = VertexSize[] ;
+    else if (GridLocation = CellCenter)
+        DataSize[] = CellSize[] ;          /* <- implicit, from Elements_t */
+}
+/* ... Rind-present cases follow the same pattern ... */
+\end{lstlisting}
+
+No \texttt{PointList}/\texttt{PointRange} is required for the
+\texttt{CellCenter} branch because \texttt{CellSize[]} is already
+well-defined from the zone's \texttt{CellDimension}-order
+\texttt{Elements\_t} sections. This CPEX asks for nothing more than
+extending that same, already-accepted pattern to \texttt{FaceCenter} in
+the one case where an equally strong SIDS guarantee already exists ---
+\texttt{NGON\_n} coverage. See Section~\ref{sec:datasize} for the precise
+proposed addition to \texttt{DataSize[]}.
+
+\subsection{Existing Implementation Gaps}
+\label{sec:implementation-gaps}
+
+Two related gaps in the reference implementation were found while
+preparing this proposal. Neither is created by this CPEX, but both must
+be fixed as part of its reference implementation, since they sit
+directly in the code paths this CPEX touches.
+
+\subsubsection{\texttt{cg\_sol\_write} rejects plain \texttt{FaceCenter}}
+\label{sec:cg_sol_write_gap}
+
+\texttt{cg\_sol\_write} (\texttt{cgnslib.c}) validates its
+\texttt{location} argument against an explicit allow-list:
+
+\begin{lstlisting}[language=C]
+if (location != CGNS_ENUMV(Vertex) &&
+    location != CGNS_ENUMV(CellCenter) &&
+    location != CGNS_ENUMV(IFaceCenter) &&
+    location != CGNS_ENUMV(JFaceCenter) &&
+    location != CGNS_ENUMV(KFaceCenter)) {
+    cgi_error("Given grid location not supported for FlowSolution_t");
+    return CG_ERROR;
+}
+\end{lstlisting}
+
+Plain \texttt{FaceCenter} --- the only location an unstructured zone can
+use for face data --- is not in this list. Today, the only way to create
+such a solution is the two-step sequence
+\texttt{cg\_sol\_write(..., CellCenter, ...)} followed by
+\texttt{cg\_gridlocation\_write(..., FaceCenter)}, which happens to work
+only because \texttt{cg\_gridlocation\_write} performs its own, separate
+validation (\texttt{cgi\_check\_location}) that \emph{does} permit
+\texttt{FaceCenter} for \texttt{CellDimension~$\geq$~3}. This is a latent
+usability bug independent of Note~5, and it directly affects every user
+who wants to write \texttt{FaceCenter} data today, whether or not this
+CPEX is adopted. Tracked as
+\href{https://github.com/CGNS/CGNS/issues/964}{CGNS/CGNS \#964}.
+
+\subsubsection{\texttt{cgnscheck} never reads \texttt{FlowSolution\_t}'s point set}
+\label{sec:cgnscheck_gap}
+
+\texttt{check\_solution()} (\texttt{cgnscheck.c}) computes the expected
+data-array size via \texttt{get\_data\_size()}, which contains:
+
+\begin{lstlisting}[language=C]
+if (z->type == CGNS_ENUMV(Unstructured)) {
+    error ("grid location %s not valid for unstructured zone",
+        cg_GridLocationName (location));
+    return 0;
+}
+\end{lstlisting}
+
+This fires for \emph{any} \texttt{GridLocation} other than
+\texttt{Vertex}/\texttt{CellCenter} on an unstructured zone ---
+including \texttt{FaceCenter} with a fully populated, conformant
+\texttt{PointRange}. \texttt{check\_solution()} never calls
+\texttt{cg\_ptset\_info}/\texttt{cg\_ptset\_read} at all, so today's
+required identity-point-set workaround (Section~2) is not actually
+validated by the reference conformance checker; it merely fails to be
+flagged as wrong once \texttt{error()}'s non-fatal path is taken. This
+CPEX's reference implementation fixes \texttt{get\_data\_size()} to honor
+\texttt{ListLength[]} from an explicit point set (already required by the
+current SIDS) in addition to the new implicit \texttt{NGON\_n} sizing
+this CPEX adds. Tracked as
+\href{https://github.com/CGNS/CGNS/issues/965}{CGNS/CGNS \#965}.
+
+%% ═════════════════════════════════════════════════════════════════════════
+\section{Detailed Description}
+%% ═════════════════════════════════════════════════════════════════════════
+
+\subsection{Design Overview}
+
+The proposal has three parts:
+
+\begin{enumerate}[leftmargin=2em]
+\item A formal SIDS definition of \emph{complete NGON face coverage}
+  (Section~\ref{sec:definition}), built entirely from existing SIDS
+  guarantees --- no new node types or structural elements are
+  introduced.
+\item A redline amendment to SIDS Note~5 in \texttt{FlowSolution\_t}
+  (\S7.7) and the matching clause in \texttt{DiscreteData\_t}
+  (\S12.4), and a corresponding addition to the \texttt{DataSize[]}
+  structure function (Section~\ref{sec:datasize}).
+\item MLL changes (Section~\ref{sec:mll}) to compute and validate the
+  implicit face count, plus the two unrelated implementation-gap fixes
+  from Section~\ref{sec:implementation-gaps}.
+\end{enumerate}
+
+\subsection{Definition: Complete NGON Face Coverage}
+\label{sec:definition}
+
+An unstructured zone $Z$ has \textbf{complete NGON face coverage} if and
+only if:
+
+\begin{enumerate}[leftmargin=2em]
+\item $Z$ contains one or more \texttt{Elements\_t} sections of type
+  \texttt{NGON\_n}; and
+\item the union of the \texttt{ElementRange}s of those sections forms a
+  single contiguous block $[E_{\mathrm{start}}, E_{\mathrm{end}}]$ of
+  the zone's global element numbering (trivially true for one section;
+  for multiple \texttt{NGON\_n} sections, their ranges must partition
+  $[E_{\mathrm{start}}, E_{\mathrm{end}}]$ with no gaps, and no element
+  index inside that block may belong to a non-\texttt{NGON\_n}
+  section).
+\end{enumerate}
+
+When these conditions hold, the face count is
+$N_{\mathrm{face}} = E_{\mathrm{end}} - E_{\mathrm{start}} + 1$, and the
+\textbf{implicit \texttt{FaceCenter} indexing rule} is: the $j$-th entry
+(1-based) of the \texttt{DataArray\_t} maps to global element index
+
+\[ E_{\mathrm{start}} + j - 1, \qquad 1 \le j \le N_{\mathrm{face}}. \]
+
+This rule refers \emph{only} to the $[E_{\mathrm{start}},
+E_{\mathrm{end}}]$ block; it says nothing about, and is unaffected by,
+any other \texttt{Elements\_t} sections elsewhere in $Z$'s global
+numbering. In particular, a zone may freely contain separate
+boundary-patch sections (\texttt{TRI\_3}, \texttt{QUAD\_4}, \ldots) used
+for \texttt{BC\_t} definitions \emph{outside} the \texttt{NGON\_n} block
+--- a common pattern in files where the volume mesh is polyhedral but
+boundary patches are still exposed via classical elements for tool
+compatibility. Their presence does not disqualify $Z$ from complete NGON
+face coverage and does not change what the implicit indexing rule means;
+those sections simply are not candidates for it. This is a deliberate
+relaxation from an earlier draft of this CPEX, which excluded any
+zone containing such sections; that exclusion turned out to be
+unnecessary, since \texttt{TRI\_3}/\texttt{QUAD\_4} sections were never
+valid candidates for ``all faces'' in the first place (see below) ---
+the only thing that matters is that $[E_{\mathrm{start}},
+E_{\mathrm{end}}]$ itself is unambiguous, which condition~2 already
+guarantees regardless of what else exists in the zone.
+
+This CPEX intentionally does \textbf{not} extend the implicit-sizing idea
+to classical 2-D sections (\texttt{TRI\_3}, \texttt{QUAD\_4}, \ldots)
+themselves, i.e., there is no equivalent rule that lets \emph{their}
+combined \texttt{ElementSize} stand in for ``the face count of the
+zone.'' Unlike \texttt{NGON\_n}, the SIDS gives no guarantee that such
+sections enumerate \emph{all} faces of a zone; in the overwhelming
+majority of existing CGNS files they enumerate boundary faces only.
+Treating their combined \texttt{ElementSize} as ``the face count of the
+zone'' would silently misinterpret a large fraction of legacy files.
+This CPEX similarly does not extend to \texttt{EdgeCenter} on 2-D zones:
+SIDS has no analogous ``this element type enumerates all edges''
+primitive for edges, so no equivalent guarantee is available there.
+
+\subsection{Revised SIDS Text: \texttt{FlowSolution\_t} (\S7.7, Note~5)}
+
+\textbf{Current text:}
+\begin{sidsold}
+For unstructured zones GridLocation options are limited to Vertex or
+CellCenter, unless one of PointList or PointRange is present.
+\end{sidsold}
+
+\textbf{Proposed text:}
+\begin{sidsnew}
+For unstructured zones GridLocation options are limited to Vertex or
+CellCenter, unless one of PointList or PointRange is present,
+{\color{cgnsgold}or unless GridLocation is FaceCenter and the zone has
+complete NGON face coverage (\S7.3), in which case indexing follows the
+zone's NGON\_n element numbering directly.}
+\end{sidsnew}
+
+\subsection{Revised SIDS Text: \texttt{DiscreteData\_t} (\S12.4)}
+
+The matching clause in \texttt{DiscreteData\_t} is amended the same way,
+for consistency --- both notes were introduced together by CPEX~0031 and
+have always read the same way, modulo word order (``PointRange or
+PointList'' here vs.\ ``PointList or PointRange'' in \S7.7):
+
+\textbf{Current text:}
+\begin{sidsold}
+For unstructured zones GridLocation options are limited to Vertex or
+CellCenter, unless one of PointRange or PointList is present.
+\end{sidsold}
+
+\textbf{Proposed text:}
+\begin{sidsnew}
+For unstructured zones GridLocation options are limited to Vertex or
+CellCenter, unless one of PointRange or PointList is present,
+{\color{cgnsgold}or unless GridLocation is FaceCenter and the zone has
+complete NGON face coverage (\S7.3), in which case indexing follows the
+zone's NGON\_n element numbering directly.}
+\end{sidsnew}
+
+\texttt{ZoneSubRegion\_t} and \texttt{BC\_t}, the other two structures
+touched by CPEX~0031, are deliberately \emph{not} amended here.
+\texttt{ZoneSubRegion\_t} always requires an explicit region descriptor
+(point set, \texttt{BCRegionName}, or \texttt{GridConnectivityRegionName})
+regardless of \texttt{GridLocation}, so Note~5 there is not a burden in
+the same way. \texttt{BC\_t} does not carry this clause at all (a BC
+patch is definitionally a \emph{subset}, so an explicit point set is
+appropriate there even for a complete-coverage zone). See
+Section~\ref{sec:open-questions} for discussion of whether a future CPEX
+should revisit \texttt{ZoneSubRegion\_t} as well.
+
+\subsection{Revised \texttt{DataSize[]} Structure Function}
+\label{sec:datasize}
+
+Section~7.7's \texttt{DataSize[]} definition gains one new branch,
+inserted ahead of the existing \texttt{PointRange}/\texttt{PointList}
+check (an explicit point set, if present, still takes precedence, so
+existing identity-point-set files are unaffected):
+
+\begin{lstlisting}[language=C]
+if (PointRange/PointList is present) {
+    DataSize[] = ListLength[] ;
+}
+else if (GridLocation = FaceCenter) and
+        (zone has complete NGON face coverage) then {
+    DataSize[] = FaceSize[] ;  /* E_end - E_start + 1 for the zone's
+                                * contiguous NGON_n block; see Sec. 4.2.
+                                * Named FaceSize[], not NFace[], to
+                                * avoid confusion with NFACE_n cell
+                                * counts. */
+}
+else if (Rind is absent) then {
+    if (GridLocation = Vertex) or (GridLocation is absent)
+        DataSize[] = VertexSize[] ;
+    else if (GridLocation = CellCenter)
+        DataSize[] = CellSize[] ;
+}
+else if (Rind is present) then {
+    /* unchanged; FaceSize[] + RindPlanes for the new FaceCenter case,
+       by direct analogy with the existing CellCenter branch */
+    ...
+}
+\end{lstlisting}
+
+\subsection{MLL Changes}
+\label{sec:mll}
+
+\subsubsection{New internal helper}
+
+\begin{lstlisting}[language=C]
+/* cgns_internals.c */
+int cgi_zone_ngon_face_range(cgns_zone *zone,
+                              cgsize_t *start, cgsize_t *end);
+    /* Returns CG_OK and the contiguous [start,end] face range if the
+     * zone has complete NGON face coverage per Sec. 4.2; returns
+     * CG_NODE_NOT_FOUND if the zone has no NGON_n sections at all;
+     * returns CG_ERROR (with cgi_error() detail) if NGON_n sections
+     * exist but coverage is not complete (gaps, or mixed with
+     * classical 2-D face-bearing sections). */
+\end{lstlisting}
+
+This helper is used by \texttt{cg\_sol\_write}/\texttt{cg\_field\_write}
+(and their \texttt{cg\_discrete\_*} counterparts) whenever
+\texttt{GridLocation~=~FaceCenter} is requested on an unstructured zone
+with no accompanying point set, to (a)~confirm the relaxation applies and
+(b)~compute the expected \texttt{DataArray\_t} size for validation on
+write, exactly as \texttt{CellSize[]} is already used for
+\texttt{CellCenter}.
+
+\subsubsection{Fix: \texttt{cg\_sol\_write} allow-list}
+
+The existing allow-list (Section~\ref{sec:cg_sol_write_gap}) is extended
+to include \texttt{FaceCenter} unconditionally (it is already accepted
+downstream by \texttt{cgi\_check\_location} for
+\texttt{CellDimension~$\geq$~3}; only the local check in
+\texttt{cg\_sol\_write} was overly strict):
+
+\begin{lstlisting}[language=C]
+if (location != CGNS_ENUMV(Vertex) &&
+    location != CGNS_ENUMV(CellCenter) &&
+    location != CGNS_ENUMV(FaceCenter) &&      /* added */
+    location != CGNS_ENUMV(IFaceCenter) &&
+    location != CGNS_ENUMV(JFaceCenter) &&
+    location != CGNS_ENUMV(KFaceCenter)) {
+    cgi_error("Given grid location not supported for FlowSolution_t");
+    return CG_ERROR;
+}
+\end{lstlisting}
+
+This fix is independent of the rest of this CPEX (it does not by itself
+relax Note~5) but is required in order for
+Section~\ref{sec:examples}'s single-call write example to work; without
+it, applications must still fall back to the two-step
+\texttt{cg\_sol\_write}~+~\texttt{cg\_gridlocation\_write} sequence.
+
+\subsubsection{Fix: \texttt{cgnscheck} point-set-aware sizing}
+
+\texttt{get\_data\_size()} (Section~\ref{sec:cgnscheck_gap}) is updated
+to: (1)~read a \texttt{PointList}/\texttt{PointRange} under
+\texttt{FlowSolution\_t}/\texttt{DiscreteData\_t}, if present, and use its
+\texttt{ListLength} as the expected size (this branch is required by the
+\emph{current} SIDS and was simply never implemented); and (2)~when no
+point set is present and \texttt{GridLocation~=~FaceCenter} on an
+unstructured zone, call \texttt{cgi\_zone\_ngon\_face\_range()} and use
+the returned count. Only when neither applies does
+\texttt{get\_data\_size()} retain its current ``grid location not valid
+for unstructured zone'' error.
+
+\subsubsection{No change to on-disk representation}
+
+No new node type, attribute, or data layout is introduced. A conformant
+file under this CPEX is a \texttt{FlowSolution\_t} (or
+\texttt{DiscreteData\_t}) node with \texttt{GridLocation~=~FaceCenter}
+and \emph{no} \texttt{PointList}/\texttt{PointRange} child, on a zone with
+complete NGON face coverage. Because this is a strict superset of what
+Note~5 currently forbids, this CPEX changes only the \emph{normative
+interpretation} of an existing, legal-today node shape --- it does not
+add anything a pre-CPEX HDF5/ADF reader would fail to open at the
+byte level.
+
+\subsection{Scope / Non-Goals}
+
+\begin{itemize}[leftmargin=2em]
+\item \textbf{Not addressed:} \texttt{EdgeCenter} on 2-D unstructured
+  zones. No SIDS element type gives edges a completeness guarantee
+  analogous to \texttt{NGON\_n}'s for faces.
+\item \textbf{Not addressed:} implicit sizing for classical 2-D sections
+  (\texttt{TRI\_3}/\texttt{QUAD\_4}/\ldots). See
+  Section~\ref{sec:definition}.
+\item \textbf{Not addressed:} \texttt{ZoneSubRegion\_t}, \texttt{BC\_t}.
+  See discussion at the end of Section~4.4.
+\item \textbf{Not required:} no change to \texttt{NFACE\_n}'s own
+  definition, or to how \texttt{CellCenter} is already handled; both are
+  unaffected and serve as the existing precedent this CPEX generalizes.
+\end{itemize}
+
+%% ═════════════════════════════════════════════════════════════════════════
+\section{Backward Compatibility}
+%% ═════════════════════════════════════════════════════════════════════════
+
+\begin{itemize}[leftmargin=2em]
+\item \textbf{Existing files:} Fully compatible. Files using the current
+  identity-point-set workaround remain valid; the explicit
+  \texttt{PointRange}/\texttt{PointList} branch of the revised
+  \texttt{DataSize[]} function still takes precedence over the new
+  implicit branch, so nothing about their interpretation changes.
+
+\item \textbf{Existing readers (pre-CPEX-0051).} A pre-CPEX reader that
+  encounters a \texttt{FaceCenter} \texttt{FlowSolution\_t} with no point
+  set on a complete-NGON zone will, under the \emph{old} SIDS text,
+  consider the file non-conformant (Note~5 as currently written requires
+  the point set), and a naive reader may simply misinterpret the array
+  size instead of erroring cleanly. This is the one real compatibility
+  wrinkle, and it deserves emphasis: writers that adopt this CPEX are
+  producing files that are conformant under the \emph{new} SIDS text but
+  not the old one, so \textbf{a writer must not omit the point set
+  unless it knows its downstream tool ecosystem supports this CPEX}.
+  CGNS versions its SIDS compliance via \texttt{CGNSLibraryVersion\_t}
+  (and, if CPEX~0049 is adopted, \texttt{CGNSMinRequiredVersion\_t}).
+  If CPEX~0049 is adopted, this CPEX \textbf{must} be registered in its
+  Feature-Version Registry (CPEX~0049, ``Feature-Version Registry''
+  section) so that AUTO write mode raises a file's minimum required
+  version whenever
+  the implicit \texttt{FaceCenter} form is used, and so that
+  version-aware readers reject or warn appropriately rather than
+  silently misreading array sizes. If CPEX~0049 is not adopted, this
+  CPEX should instead mandate a plain \texttt{CGNSLibraryVersion\_t}
+  bump on write, as the minimum viable version-gating mechanism.
+
+  \textbf{Why a major release.} This CPEX is targeted at CGNS
+  \textbf{v5.0.0}, the next major release, rather than a point release
+  on the v4.x line. This is not merely a labeling choice: under
+  CPEX~0049's revised \texttt{cg\_open} logic, a library whose major
+  version is older than the file's major version is rejected
+  immediately, before any feature-compatibility check runs (CPEX~0049,
+  ``Modified \texttt{cg\_open} Behavior,'' major-version safety guard).
+  If this CPEX lands in v5.0.0 alongside CPEX~0049, a v4.x reader
+  opening a v5.0-written file is hard-rejected at that guard and never
+  reaches the point where it would have to interpret a point-set-free
+  \texttt{FaceCenter} solution at all, eliminating the ``silently
+  misreads the data'' failure mode entirely for that population of
+  readers. This is a stronger guarantee than a minor-version bump could
+  offer under the same mechanism, since CPEX~0049 only hard-rejects on
+  a major-version mismatch; a same-major, higher-minor file is instead
+  routed through the feature-aware check, which depends on this CPEX's
+  Feature-Version Registry entry being present and correctly detected.
+
+\item \textbf{Existing writers:} Unaffected. Codes that do not use the
+  new implicit form continue to write the explicit point set exactly as
+  before; nothing is deprecated or removed.
+
+\item \textbf{ABI:} No structure layout changes are required beyond the
+  addition of the internal \texttt{cgi\_zone\_ngon\_face\_range()}
+  helper. The public API changes are limited to widening
+  \texttt{cg\_sol\_write}'s accepted \texttt{location} values (already a
+  bug fix independent of this CPEX) and are purely additive in effect
+  (previously-rejected input is now accepted; no previously-accepted
+  input is rejected). \textbf{No new public error codes are introduced.}
+  A write requesting implicit \texttt{FaceCenter} sizing on a zone that
+  lacks complete NGON face coverage returns the existing
+  \texttt{CG\_ERROR} (with a \texttt{cgi\_error()} message identifying
+  the missing coverage), exactly as an out-of-range \texttt{GridLocation}
+  does today; \texttt{cgi\_zone\_ngon\_face\_range()} itself is an
+  internal helper and its \texttt{CG\_NODE\_NOT\_FOUND}/\texttt{CG\_ERROR}
+  return values are not part of the public API.
+
+\item \textbf{Parallel I/O (\texttt{cgp\_*}):} Unaffected. The relaxation
+  changes only whether a point-set child node must exist; it does not
+  change the collective/independent write model for
+  \texttt{DataArray\_t} contents.
+\end{itemize}
+
+%% ═════════════════════════════════════════════════════════════════════════
+\section{Examples}
+\label{sec:examples}
+%% ═════════════════════════════════════════════════════════════════════════
+
+\subsection{Example 1: Before --- Identity \texttt{PointRange} (current, still valid)}
+
+\begin{lstlisting}[language=C]
+int S, F;
+cg_sol_write(fn, B, Z, "CellData", CGNS_ENUMV(CellCenter), &S);
+cg_field_write(fn, B, Z, S, CGNS_ENUMV(RealDouble), "Pressure",
+               pressure, &F);
+
+/* FaceCenter solution requires the two-step dance today, plus an
+ * explicit identity PointRange matching the NGON ElementRange. */
+cg_sol_write(fn, B, Z, "FaceData", CGNS_ENUMV(CellCenter), &S);
+cg_gridlocation_write(fn, B, Z, S, CGNS_ENUMV(FaceCenter));
+cgsize_t range[2] = {1, 36};   /* must be kept in sync with NGonElements
+                                   ElementRange by hand */
+cg_ptset_write(fn, B, Z, S, CGNS_ENUMV(PointRange), 2, range);
+cg_field_write(fn, B, Z, S, CGNS_ENUMV(RealDouble), "NormalX",
+               normal_x, &F);
+\end{lstlisting}
+
+\subsection{Example 2: After --- Implicit \texttt{FaceCenter} (this CPEX)}
+
+\begin{lstlisting}[language=C]
+int S, F;
+
+/* FaceCenter now accepted directly by cg_sol_write (Sec. 5.4.2);
+ * no PointRange needed -- the zone's NGonElements section already
+ * defines the face numbering. */
+cg_sol_write(fn, B, Z, "FaceData", CGNS_ENUMV(FaceCenter), &S);
+cg_field_write(fn, B, Z, S, CGNS_ENUMV(RealDouble), "NormalX",
+               normal_x, &F);   /* size validated against NGON face count */
+\end{lstlisting}
+
+Resulting tree (compare to Section~2's example):
+
+\begin{lstlisting}[language=C]
+fluid_zone Zone_t [[27  8  0]]
++---ZoneType ZoneType_t "Unstructured"
++---NGonElements Elements_t [22  0]
+|   +---ElementRange IndexRange_t [ 1 36]
++---NFaceElements Elements_t [23  0]
+|   +---ElementRange IndexRange_t [37 44]
++---CellData FlowSolution_t
+|   +---GridLocation GridLocation_t "CellCenter"
+|   +---Pressure DataArray_t
++---FaceData FlowSolution_t
+    +---GridLocation GridLocation_t "FaceCenter"
+    +---NormalX DataArray_t     /* 36 values; indexed 1..36 against
+                                    NGonElements, no PointRange node */
+\end{lstlisting}
+
+\subsection{Example 3: Reading --- Dispatching on Coverage}
+
+\begin{lstlisting}[language=C]
+CGNS_ENUMT(GridLocation_t) loc;
+CGNS_ENUMT(PointSetType_t) ptype;
+cgsize_t npnts;
+
+cg_sol_info(fn, B, Z, S, name, &loc);
+int has_ptset = (cg_ptset_info(&ptype, &npnts) == CG_OK);
+
+if (loc == CGNS_ENUMV(FaceCenter) && !has_ptset) {
+    /* Implicit form (this CPEX): spans every NGON face by
+     * construction. No PointRange to compare against the face
+     * count -- the check this CPEX was written to eliminate. */
+    process_all_faces(fn, B, Z, S);
+} else if (loc == CGNS_ENUMV(FaceCenter) && has_ptset) {
+    /* Explicit form: a genuine subset, or a pre-CPEX-0051 file. */
+    process_face_subset(fn, B, Z, S, ptype, npnts);
+}
+\end{lstlisting}
+
+\subsection{Example 4: Rejected --- Non-Contiguous NGON\_n Sections}
+
+\begin{lstlisting}[language=C]
+/* Zone has TWO NGON_n sections separated by an unrelated section,
+ * e.g. ElementRange [1,20] (NGON_n), [21,30] (some other type),
+ * [31,50] (NGON_n). Condition 2 of Sec. 4.2 is violated: the NGON_n
+ * ranges do not form a single contiguous block, so there is no
+ * well-defined [E_start, E_end] to index against. The explicit
+ * point set is still required.
+ *
+ * Note: a zone with an NGON_n section PLUS a separate boundary-patch
+ * QUAD_4 section OUTSIDE the NGON_n range (e.g. ElementRange [1,36]
+ * NGON_n, [37,44] QUAD_4 for BC_t) is fine and DOES qualify -- see
+ * Sec. 4.2's revised Condition 2 and Example 5. */
+cg_sol_write(fn, B, Z, "FaceData", CGNS_ENUMV(FaceCenter), &S);
+/* cg_field_write size-validation falls back to requiring an
+ * explicit PointList/PointRange, and cgnscheck flags its absence. */
+\end{lstlisting}
+
+\subsection{Example 5: Accepted --- NGON\_n Coexisting with a Boundary-Patch Section}
+
+\begin{lstlisting}[language=C]
+/* Zone has an NGON_n section [1,36] covering every face, PLUS a
+ * separate QUAD_4 section [37,44] duplicating the boundary faces
+ * for a BC_t patch -- a common pattern for tool compatibility.
+ * This still qualifies for implicit FaceCenter indexing: the
+ * NGON_n range [1,36] is contiguous on its own, and the QUAD_4
+ * section lies entirely outside it. */
+cg_sol_write(fn, B, Z, "FaceData", CGNS_ENUMV(FaceCenter), &S);
+cg_field_write(fn, B, Z, S, CGNS_ENUMV(RealDouble), "NormalX",
+               normal_x, &F);   /* 36 values, indexed against [1,36] */
+\end{lstlisting}
+
+%% ═════════════════════════════════════════════════════════════════════════
+\section{SIDS Impact}
+%% ═════════════════════════════════════════════════════════════════════════
+
+\begin{itemize}[leftmargin=2em]
+\item \S7.7 \texttt{FlowSolution\_t}, Note~5: amended (Section~4.3).
+\item \S7.7 \texttt{FlowSolution\_t}, \texttt{DataSize[]} function:
+  amended (Section~\ref{sec:datasize}).
+\item \S12.4 \texttt{DiscreteData\_t}, equivalent Note: amended
+  (Section~4.4), including its own \texttt{DataSize[]}-equivalent
+  language, mirrored from \S7.7.
+\item \S7.3 \texttt{Elements\_t}: unchanged. This CPEX relies entirely
+  on the existing global-numbering and ``\texttt{NGON\_n} specifies all
+  faces'' guarantees already stated there (Section~\ref{sec:why-ngon});
+  no new text is needed in \S7.3 itself.
+\item No new SIDS node types, enumerations, or structural fields are
+  introduced anywhere.
+\end{itemize}
+
+%% ═════════════════════════════════════════════════════════════════════════
+\section{File Mapping Impact}
+%% ═════════════════════════════════════════════════════════════════════════
+
+None. This CPEX changes only which combinations of existing nodes are
+considered conformant; it introduces no new HDF5/ADF on-disk structures,
+attributes, or data types. The ADFH and ADF file-mapping documents
+require no amendment.
+
+%% ═════════════════════════════════════════════════════════════════════════
+\section{Design Decisions}
+%% ═════════════════════════════════════════════════════════════════════════
+
+\subsection{Alternative 1: Broaden Coverage to Any Complete 2-D Section}
+
+A more general rule could drop Note~5 whenever \emph{any} face-bearing
+element type's combined \texttt{ElementSize} equals the zone's total
+face count, regardless of type (\texttt{TRI\_3}/\texttt{QUAD\_4}/
+\texttt{NGON\_n}). \textbf{Rejected.} Nothing in the SIDS guarantees that
+classical 2-D sections are complete; in the large majority of existing
+files they represent boundary patches only. This alternative would
+require either (a)~trusting a coincidental size match, which is fragile
+and has produced silent misinterpretation bugs in similar contexts
+elsewhere in the ecosystem, or (b)~introducing a new explicit
+``these elements are all the faces'' marker --- which is just a
+worse-ergonomics version of what \texttt{NGON\_n} already means by
+definition. Scoping strictly to \texttt{NGON\_n} avoids inventing any new
+machinery.
+
+\subsection{Alternative 2: New Explicit Marker Node (e.g., \texttt{FacesComplete})}
+
+Introduce a boolean/flag child of \texttt{Zone\_t} or \texttt{Elements\_t}
+stating explicitly that a section enumerates all faces --- reviving, in
+spirit, the 2005-era ``\texttt{ZoneElementType}'' idea from the original
+face-based storage proposal that predated \texttt{NGON\_n}/\texttt{NFACE\_n}
+standardization. \textbf{Rejected.} \texttt{NGON\_n} already carries this
+meaning by SIDS definition (\S7.3); adding a redundant marker node
+reintroduces exactly the kind of ``assert something already implied''
+overhead this CPEX exists to remove, just relocated from
+\texttt{FlowSolution\_t} to \texttt{Zone\_t}.
+
+\subsection{Alternative 3 (chosen): Structural Inference from \texttt{NGON\_n} Coverage}
+
+Infer completeness structurally from the conditions in
+Section~\ref{sec:definition}, using only guarantees the SIDS already
+makes. No new nodes; no new trust assumptions beyond ones the standard
+already relies on for \texttt{CellCenter}. This is the design adopted by
+this CPEX.
+
+\subsection{On Scope: Why Not Also Amend \texttt{ZoneSubRegion\_t}?}
+\label{sec:open-questions}
+
+\texttt{ZoneSubRegion\_t} (\S7.9) shares CPEX~0031 ancestry with
+\texttt{FlowSolution\_t} and \texttt{DiscreteData\_t}, but it always
+requires an explicit region descriptor by design --- a subregion that
+happened to cover every face would be indistinguishable from simply
+using \texttt{FlowSolution\_t}, so there is no analogous ``identity point
+set'' pain point to remove. This is left as an open question for the
+committee rather than folded into this proposal's scope.
+
+%% ═════════════════════════════════════════════════════════════════════════
+\section{Open Questions}
+%% ═════════════════════════════════════════════════════════════════════════
+
+\begin{enumerate}[leftmargin=2em]
+\item Should \texttt{cgnscheck} \emph{warn} (rather than silently accept)
+  when it encounters the pre-CPEX-0051 identity-\texttt{PointRange}
+  pattern on a complete-NGON zone, to nudge writers toward the more
+  compact implicit form? This proposal takes no position; it is a
+  tooling policy choice, not a conformance question.
+\item Should version gating use CPEX~0049's
+  \texttt{CGNSMinRequiredVersion\_t}/feature-mask mechanism, if adopted,
+  or a plain \texttt{CGNSLibraryVersion\_t} bump? This CPEX assumes
+  whichever mechanism is current SIDS practice at the time of adoption
+  and does not mandate a specific one.
+\item CPEX~0050 (\texttt{DofStorage\_t}), Example~4, already writes a
+  \texttt{FaceCenter} \texttt{TraceSolution} via a single
+  \texttt{cg\_sol\_write} call with no accompanying point set, for a
+  zone implied to have \texttt{NGON\_n} coverage. That example is only
+  fully conformant once both this CPEX (for the missing point set) and
+  the \texttt{cg\_sol\_write} allow-list fix
+  (Section~\ref{sec:cg_sol_write_gap}) are adopted. If both CPEXes
+  proceed, their reference implementations should be sequenced so
+  CPEX~0051 lands first, or the dependency should be noted explicitly in
+  CPEX~0050.
+\end{enumerate}
+
+%% ═════════════════════════════════════════════════════════════════════════
+\section{Summary of API Additions}
+%% ═════════════════════════════════════════════════════════════════════════
+
+\begin{center}
+\rowcolors{2}{cgnslight!30}{white}
+\begin{tabular}{l l}
+\toprule
+\rowcolor{cgnsblue!15}
+\textbf{Symbol} & \textbf{Change} \\
+\midrule
+\texttt{cgi\_zone\_ngon\_face\_range()} & New internal helper (Sec.~\ref{sec:mll}) \\
+\texttt{cg\_sol\_write}                 & Accepts \texttt{FaceCenter} directly (bug fix) \\
+\texttt{cg\_discrete\_write}            & Same fix, mirrored \\
+\texttt{get\_data\_size()} (cgnscheck)  & Point-set- and NGON-aware sizing (bug fix) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+No new public enumerations, structs, or function signatures are
+introduced; \texttt{FaceCenter} already exists in
+\texttt{GridLocation\_t}.
+
+%% ═════════════════════════════════════════════════════════════════════════
+\section{References}
+%% ═════════════════════════════════════════════════════════════════════════
+
+\begin{enumerate}[leftmargin=2em]
+\item CGNS SIDS, \S7.3 \texttt{Elements\_t} (element numbering, \texttt{NGON\_n}/\texttt{NFACE\_n} definition).
+\item CGNS SIDS, \S7.7 \texttt{FlowSolution\_t} (Notes and \texttt{DataSize[]} function).
+\item CGNS SIDS, \S12.4 \texttt{DiscreteData\_t}.
+\item CGNS SIDS Changelog, Version~3.1 (CPEX~0031: PointList/PointRange revamp; \texttt{NGON\_n}/\texttt{NFACE\_n} formalization).
+\item CPEX~0049, CGNS Compatibility Version Control (version-gating mechanism referenced in Section~6).
+\item CPEX~0050, DOF Storage Type (Example~4 dependency noted in Section~9.4).
+\item S.~Allmaras, ``Face-Based Proposal'' (2005-era precursor discussion of face-based unstructured storage, predating standardized \texttt{NGON\_n}/\texttt{NFACE\_n}).
+\end{enumerate}
+
+\end{document}
