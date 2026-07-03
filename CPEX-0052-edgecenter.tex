@@ -1,0 +1,384 @@
+\documentclass[11pt,letterpaper]{article}
+
+%% ── Packages ──────────────────────────────────────────────────────────────
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=1.5in]{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{colortbl}
+\usepackage{parskip}
+\usepackage{microtype}
+\usepackage{hyphenat}
+\setlength{\emergencystretch}{3em}
+\usepackage{needspace}
+\usepackage[right,running]{lineno}
+
+%% ── Suppress lineno inside code listings ────────────────────────────────
+\makeatletter
+\let\cgns@orig@lstlisting\lstlisting
+\let\cgns@endorig@lstlisting\endlstlisting
+\renewenvironment{lstlisting}
+  {\par\needspace{5\baselineskip}\nolinenumbers\cgns@orig@lstlisting}
+  {\cgns@endorig@lstlisting\par\linenumbers}
+\makeatother
+
+%% ── Color palette ───────────────────────────────────────────────────────
+\definecolor{cgnsblue}{HTML}{1F4E79}
+\definecolor{cgnsteal}{HTML}{2E7D8C}
+\definecolor{cgnslight}{HTML}{D6EAF0}
+\definecolor{cgnsgold}{HTML}{C78C1C}
+
+%% ── Hyperlink style ──────────────────────────────────────────────────────
+\hypersetup{
+  colorlinks=true,
+  linkcolor=cgnsblue,
+  urlcolor=cgnsteal,
+  citecolor=cgnsblue,
+}
+
+%% ── Code listing style ──────────────────────────────────────────────────
+\lstset{
+  basicstyle=\scriptsize\ttfamily,
+  keywordstyle=\bfseries\color{cgnsblue},
+  commentstyle=\itshape\color{cgnsteal},
+  stringstyle=\color{red!60!black},
+  breaklines=true,
+  frame=single,
+  framerule=0.5pt,
+  rulecolor=\color{cgnsblue!40},
+  backgroundcolor=\color{cgnslight!30},
+  numbers=left,
+  numberstyle=\tiny\color{cgnsblue!50},
+  numbersep=6pt,
+  showstringspaces=false,
+  xleftmargin=1em,
+  xrightmargin=1em,
+  aboveskip=1em,
+  belowskip=1em,
+  tabsize=4,
+}
+
+%% ── Redline environments (SIDS text diff) ────────────────────────────────
+\newenvironment{sidsold}{%
+  \par\vspace{0.6em}\noindent
+  \begin{quote}\color{black!55}\ttfamily\small\itshape
+}{%
+  \end{quote}\vspace{-0.2em}
+}
+\newenvironment{sidsnew}{%
+  \par\noindent
+  \begin{quote}\color{cgnsblue!85}\ttfamily\small\bfseries
+}{%
+  \end{quote}\vspace{0.6em}
+}
+
+%% ── Header / Footer ────────────────────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\color{cgnsblue} CPEX 0052 --- Directional EdgeCenter for Structured Zones}
+\fancyhead[R]{\small\color{cgnsblue} Draft v0.1 (skeleton)}
+\fancyfoot[C]{\small\color{cgnsblue}\thepage}
+\renewcommand{\headrulewidth}{0.5pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{cgnsgold}\leaders\hrule height\headrulewidth\hfill}}
+\renewcommand{\footrulewidth}{0pt}
+
+%% ── Title Formatting ───────────────────────────────────────────────────
+\titleformat{\section}{\Large\bfseries\color{cgnsblue}}{\thesection}{0.6em}{}[\vspace{0.2em}{\color{cgnsgold}\titlerule[0.8pt]}]
+\titleformat{\subsection}{\large\bfseries\color{cgnsblue!85}}{\thesubsection}{0.6em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries\color{cgnsteal}}{\thesubsubsection}{0.6em}{}
+
+%% =====================================================================
+\begin{document}
+\linenumbers
+
+%% ── Title Block ─────────────────────────────────────────────────────────
+\begin{center}
+  \includegraphics[width=0.25\textwidth]{CGNS_logo_1.png}\\[1.2em]
+  {\LARGE\bfseries\color{cgnsblue} CGNS Proposal for Extension 0052}\\[0.6em]
+  {\Large\color{cgnsteal} Directional Edge-Center GridLocations\\
+   for 2-D Structured Zones}\\[0.4em]
+  {\color{cgnsgold}\rule{0.4\textwidth}{0.8pt}}\\[0.6em]
+  {\large Draft v0.1 (skeleton --- not yet posted)}\\[0.6em]
+  \today
+\end{center}
+
+\vspace{1em}
+
+%% ── Metadata Table ──────────────────────────────────────────────────────
+\noindent
+\rowcolors{2}{cgnslight!30}{white}
+\begin{tabular}{@{} >{\bfseries\color{cgnsblue}}l l @{}}
+\toprule
+CPEX\#           & 0052 (companion to CPEX~0051) \\
+Scope            & Add \texttt{IEdgeCenter}/\texttt{JEdgeCenter} to
+                   \texttt{GridLocation\_t} so \\
+                 & 2-D structured zones can store directional
+                   edge-centered \\
+                 & data, symmetric with 3-D's
+                   \texttt{[IJK]FaceCenter} \\
+Champion         & M.\ Scot Breitenfeld \\
+Organization     & The HDF Group \\
+E-mail           & \href{mailto:brtnfld@hdfgroup.org}{brtnfld@hdfgroup.org} \\
+Origin           & Raised during CPEX~0051 pre-submission review \\
+GitHub Issue     & TBD \\
+Reference Impl.  & TBD \\
+Target Release   & TBD (new enumeration values; additive) \\
+Date First Posted & TBD (not yet posted; internal draft) \\
+SIDS Status      & skeleton \\
+Filemap Status   & skeleton \\
+MLL Status       & skeleton \\
+\bottomrule
+\end{tabular}
+
+\vspace{1.5em}
+
+\tableofcontents
+\newpage
+
+%% ═════════════════════════════════════════════════════════════════════════
+\section{Abstract}
+%% ═════════════════════════════════════════════════════════════════════════
+
+For 3-D structured zones, \texttt{GridLocation\_t} provides three
+directional face-center values ---
+\texttt{IFaceCenter}/\texttt{JFaceCenter}/\texttt{KFaceCenter} --- because
+a structured \texttt{FlowSolution\_t} array is a single
+\texttt{IndexDimension}-dimensional rectangle, and the faces normal to
+each index direction form differently-shaped rectangles that cannot share
+one array. The SIDS is explicit that these values are 3-D constructs:
+``\texttt{IFaceCenter} is the center of a face \emph{in 3-D} whose
+computational normal points in the i direction'' (Building-Block
+Structure Definitions, \texttt{GridLocation\_t}).
+
+2-D structured zones have the same need --- the cell interfaces are
+edges, and the i-normal and j-normal edge sets are differently-shaped
+rectangles --- but no directional values exist for them. The single
+undifferentiated \texttt{EdgeCenter} value cannot serve: the union of the
+two edge sets is not one rectangle, so no \texttt{DataSize[]} can be
+defined for it (Section~\ref{sec:motivation}). This CPEX adds
+\texttt{IEdgeCenter} and \texttt{JEdgeCenter} to \texttt{GridLocation\_t},
+defined for 2-D structured zones by computational normal, in exact
+analogy with \texttt{[IJK]FaceCenter}. The sizing formulas are the 2-D
+restriction of the existing \texttt{[IJK]FaceCenter} formulas; in the
+MLL, the existing \texttt{cgi\_datasize()} branch computes them verbatim
+with \texttt{IndexDimension~=~2}.
+
+%% ═════════════════════════════════════════════════════════════════════════
+\section{Motivation and Rationale}
+\label{sec:motivation}
+%% ═════════════════════════════════════════════════════════════════════════
+
+\subsection{Problem Statement}
+
+A finite-volume code on a 2-D structured grid stores fluxes on cell
+interfaces: quantities on the edges whose computational normal points in
+i, and separately on the edges whose normal points in j. On a zone with
+\texttt{VertexSize} $[VI, VJ]$ and \texttt{CellSize} $[VI{-}1, VJ{-}1]$:
+
+\begin{itemize}[leftmargin=2em]
+\item i-normal edges form a $[VI, \, VJ{-}1]$ rectangle;
+\item j-normal edges form a $[VI{-}1, \, VJ]$ rectangle.
+\end{itemize}
+
+In 3-D the identical situation is served by
+\texttt{IFaceCenter}/\texttt{JFaceCenter}/\texttt{KFaceCenter}. In 2-D
+there is no conforming way to store either edge set:
+
+\begin{enumerate}[leftmargin=2em]
+\item \textbf{\texttt{[IJK]FaceCenter} cannot be reused.} The SIDS
+  defines them as 3-D constructs (``a face in 3-D''), and the MLL
+  enforces this: \texttt{cgi\_check\_location()} requires
+  \texttt{CellDimension~$\geq$~3} for all three.
+\item \textbf{Undifferentiated \texttt{EdgeCenter} is structurally
+  insufficient.} It cannot say \emph{which} edge set is stored, and
+  even for ``all edges'' no \texttt{DataSize[]} exists: the two edge
+  sets are differently-shaped rectangles whose union is not a
+  rectangle. This is not an implementation gap --- it is the same
+  mathematical fact that forced the directional split for 3-D faces.
+\item \textbf{The MLL today contains a latent trap here.}
+  \texttt{cgi\_check\_location()} \emph{accepts} \texttt{EdgeCenter}
+  for \texttt{CellDimension~$\geq$~2}, but \texttt{cgi\_datasize()}
+  cannot size it (it falls through to ``Location not yet supported''
+  for any \texttt{CellDimension~$>$~1}). A location that validates but
+  cannot be sized should be reconciled regardless of this CPEX's fate;
+  to be filed as a CGNS issue in the spirit of
+  \href{https://github.com/CGNS/CGNS/issues/964}{\#964}/\href{https://github.com/CGNS/CGNS/issues/965}{\#965}.
+\end{enumerate}
+
+The practical workaround today is to model a 2-D problem as a 3-D zone
+one cell thick, which inflates every array and index computation for no
+physical reason.
+
+\subsection{Relationship to CPEX~0051}
+
+This proposal was raised during CPEX~0051's pre-submission review.
+It is kept separate deliberately: CPEX~0051 is scoped to unstructured
+zones and adds no new enumeration values, while this CPEX is a
+structured-zone extension whose entire substance is two new enumeration
+values. Neither depends on the other.
+
+%% ═════════════════════════════════════════════════════════════════════════
+\section{Detailed Description (skeleton)}
+%% ═════════════════════════════════════════════════════════════════════════
+
+\subsection{Proposed \texttt{GridLocation\_t} Extension}
+
+\textbf{Current text} (SIDS, Building-Block Structure Definitions):
+\begin{sidsold}
+GridLocation\_t := Enumeration(\\
+\hspace*{2em}GridLocationNull, GridLocationUserDefined,\\
+\hspace*{2em}Vertex, CellCenter, FaceCenter,\\
+\hspace*{2em}IFaceCenter, JFaceCenter, KFaceCenter,\\
+\hspace*{2em}EdgeCenter ) ;
+\end{sidsold}
+
+\textbf{Proposed text:}
+\begin{sidsnew}
+GridLocation\_t := Enumeration(\\
+\hspace*{2em}GridLocationNull, GridLocationUserDefined,\\
+\hspace*{2em}Vertex, CellCenter, FaceCenter,\\
+\hspace*{2em}IFaceCenter, JFaceCenter, KFaceCenter,\\
+\hspace*{2em}EdgeCenter{\color{cgnsgold}, IEdgeCenter, JEdgeCenter} ) ;
+\end{sidsnew}
+
+Accompanying definition text (redline sketch, mirroring the existing
+\texttt{IFaceCenter} sentence):
+
+\begin{sidsnew}
+For 2-D structured zones, IEdgeCenter is the center of an edge whose
+computational normal points in the i direction; JEdgeCenter is
+similarly defined. Both are valid only for structured zones with
+CellDimension = 2.
+\end{sidsnew}
+
+\subsection{\texttt{DataSize[]} (sketch)}
+
+The 2-D restriction of the existing \texttt{[IJK]FaceCenter} rule:
+
+\begin{itemize}[leftmargin=2em]
+\item \texttt{IEdgeCenter}:
+  $\mathtt{DataSize[]} = [\,VI,\ VJ{-}1\,]$ (+ rind, as for
+  \texttt{IFaceCenter});
+\item \texttt{JEdgeCenter}:
+  $\mathtt{DataSize[]} = [\,VI{-}1,\ VJ\,]$ (+ rind).
+\end{itemize}
+
+In the MLL, \texttt{cgi\_datasize()}'s existing
+\texttt{[IJK]FaceCenter} branch (``\texttt{DataSize[j] = dims[j]};
+decrement every dimension except the matching one'') computes exactly
+these values when run with \texttt{IndexDimension~=~2}; the
+implementation reuses it rather than adding a new formula.
+
+\subsection{MLL Changes (sketch)}
+
+\begin{itemize}[leftmargin=2em]
+\item \texttt{cgnslib.h}: append \texttt{IEdgeCenter~=~9},
+  \texttt{JEdgeCenter~=~10} to \texttt{GridLocation\_t}; bump
+  \texttt{NofValidGridLocation} $9 \rightarrow 11$. Appending preserves
+  the values of all existing members (ABI-additive).
+\item \texttt{GridLocationName[]} (\texttt{cgnsKeywords.h} and name
+  tables): two new strings.
+\item \texttt{cgi\_check\_location()}: new branch --- structured only,
+  \texttt{CellDimension~=~2}.
+\item \texttt{cgi\_datasize()}: route the new values through the
+  existing directional-face branch.
+\item \texttt{cg\_sol\_write}: nothing needed once
+  \href{https://github.com/CGNS/CGNS/issues/964}{\#964} is fixed by
+  delegation to \texttt{cgi\_check\_location} (CPEX~0051, MLL
+  Changes); with the allow-list gone, new locations are accepted
+  wherever \texttt{cgi\_check\_location} says so.
+\item \texttt{cgnscheck}, Fortran parameter constants, tools: TBD sweep.
+\end{itemize}
+
+\subsection{Backward Compatibility (sketch)}
+
+New enumeration values are additive: no existing file changes meaning,
+no existing API input changes behavior. A pre-CPEX reader encountering
+\texttt{GridLocation~=~"IEdgeCenter"} sees an unknown enumeration string;
+version gating (plain \texttt{CGNSLibraryVersion\_t} bump, or CPEX-0049
+registry entry if adopted) follows the same policy CPEX~0051 adopts.
+
+%% ═════════════════════════════════════════════════════════════════════════
+\section{Design Decisions (skeleton)}
+%% ═════════════════════════════════════════════════════════════════════════
+
+\subsection{Convention: Normal-Based, 2-D Only (proposed)}
+
+\texttt{IEdgeCenter} is defined by computational normal, the direct
+analog of the SIDS's own \texttt{IFaceCenter} definition. In 2-D the
+in-plane normal of an edge is well-defined, so the analogy is exact, and
+the flux-storage use case reads naturally: i-normal fluxes go to
+\texttt{IEdgeCenter}, as i-normal fluxes go to \texttt{IFaceCenter} in
+3-D.
+
+\subsection{Alternative: Full \texttt{[IJK]EdgeCenter} for 3-D As Well (deferred)}
+
+3-D structured zones also lack directional edge locations (edge sets
+along i/j/k are three differently-shaped rectangles). A fuller proposal
+would add \texttt{KEdgeCenter} and define all three for 3-D. Deferred,
+for one substantive reason: 3-D edges have no computational normal, so
+the 3-D definition must be \emph{parallel-to-direction} --- and an
+edge \emph{parallel} to j in 2-D is the edge \emph{normal} to i, so a
+single name cannot carry the normal-based meaning in 2-D and the
+parallel-based meaning in 3-D without inverting the i/j sense between
+dimensions. Resolving that naming question (or accepting
+dimension-dependent semantics) is left open; the 2-D-only scope has no
+such ambiguity. \emph{[Open question for the committee.]}
+
+\subsection{Alternative: Reuse \texttt{[IJ]FaceCenter} in 2-D (rejected)}
+
+Relax \texttt{cgi\_check\_location} to accept \texttt{IFaceCenter} /
+\texttt{JFaceCenter} for \texttt{CellDimension~=~2} and redefine them
+there as edges. Avoids new enumeration values, but
+contradicts the SIDS's explicit ``a face in 3-D'' definition, overloads
+``face'' to mean ``edge,'' and silently changes what existing readers
+may assume about the values. Rejected in favor of honest naming.
+
+%% ═════════════════════════════════════════════════════════════════════════
+\section{Open Questions}
+%% ═════════════════════════════════════════════════════════════════════════
+
+\begin{enumerate}[leftmargin=2em]
+\item Include 3-D \texttt{[IJK]EdgeCenter} now (with the
+  parallel-vs-normal naming question resolved), or keep the 2-D-only
+  scope?
+\item Should the latent \texttt{EdgeCenter}
+  validates-but-cannot-size inconsistency be fixed (rejected at
+  validation, or sized for the \texttt{CellDimension~=~1} case only)
+  as an independent bug, ahead of this CPEX?
+\item Version gating: CPEX-0049 registry entry vs.\ plain
+  \texttt{CGNSLibraryVersion\_t} bump (same question as CPEX~0051,
+  same answer should apply to both).
+\end{enumerate}
+
+%% ═════════════════════════════════════════════════════════════════════════
+\section{References}
+%% ═════════════════════════════════════════════════════════════════════════
+
+\begin{enumerate}[leftmargin=2em]
+\item CGNS SIDS, Building-Block Structure Definitions,
+  \texttt{GridLocation\_t} (enumeration and \texttt{IFaceCenter}
+  definition text).
+\item CGNS SIDS, Structured Grid Notation and Indexing Conventions
+  (cells, faces, edges).
+\item CPEX~0051, Implicit FaceCenter Indexing for Unstructured Zones
+  with Explicitly Defined Face Sections (origin of this proposal;
+  \texttt{cg\_sol\_write} validation delegation this CPEX relies on).
+\item CGNS/CGNS issues
+  \href{https://github.com/CGNS/CGNS/issues/964}{\#964},
+  \href{https://github.com/CGNS/CGNS/issues/965}{\#965} (precedent for
+  filing the \texttt{EdgeCenter} check/size inconsistency).
+\end{enumerate}
+
+\end{document}
