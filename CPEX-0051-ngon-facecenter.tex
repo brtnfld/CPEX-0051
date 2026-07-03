@@ -142,7 +142,7 @@ GitHub Issue     & TBD (implementation gaps tracked as \\
                  & \href{https://github.com/CGNS/CGNS/issues/964}{\#964}, \href{https://github.com/CGNS/CGNS/issues/965}{\#965}) \\
 Reference Impl.  & TBD \\
 Target Release   & CGNS v5.0.0 (major release) \\
-Date First Posted & \today \\
+Date First Posted & TBD (not yet posted; internal draft) \\
 SIDS Status      & proposed \\
 Filemap Status   & proposed \\
 MLL Status       & proposed \\
@@ -195,7 +195,7 @@ against the zone's \texttt{CellDimension}-order elements. The relaxation
 is strictly additive: files using the existing identity-point-set
 workaround remain fully conformant. Version~1.x of this proposal was
 scoped to \texttt{NGON\_n} zones only; it was broadened to classical
-face sections in response to committee review (see
+face sections in response to pre-submission review feedback (see
 Section~\ref{sec:revision-history}), which observed that the identity
 point set is exactly as redundant for a boundary-patch \texttt{QUAD\_4}
 block as it is for an \texttt{NGON\_n} block, for the same
@@ -885,7 +885,7 @@ byte level.
   matrix and is deliberately left to a future CPEX rather than folded
   into this one.
 \item \textbf{Not addressed:} the structured-zone \texttt{GridLocation}
-  gap raised during the same committee review: 2-D structured zones
+  gap raised during the same pre-submission review: 2-D structured zones
   have no directional edge-center locations
   (\texttt{IEdgeCenter}/\texttt{JEdgeCenter}) analogous to 3-D's
   \texttt{IFaceCenter}/\texttt{JFaceCenter}/\texttt{KFaceCenter} ---
@@ -1323,7 +1323,7 @@ Version~1.x of this CPEX restricted the relaxation to zones with
 carries SIDS's ``all the faces in the grid'' guarantee, and that
 treating classical 2-D sections' combined \texttt{ElementSize} as ``the
 face count of the zone'' would misinterpret boundary-patch-only files.
-\textbf{Superseded in v2.0}, following committee review. The v1.x
+\textbf{Superseded in v2.0}, following pre-submission review. The v1.x
 rejection rested on reading ``all faces'' as ``all geometric faces of
 the mesh'' --- but that is not, and never was, what face-centered data
 can address. An explicit \texttt{PointList} can only reference faces
@@ -1420,7 +1420,7 @@ committee rather than folded into this proposal's scope.
 \item Should a companion CPEX add \texttt{IEdgeCenter}/\texttt{JEdgeCenter}
   to \texttt{GridLocation\_t} for 2-D structured zones, restoring symmetry
   with 3-D's \texttt{IFaceCenter}/\texttt{JFaceCenter}/\texttt{KFaceCenter}?
-  Raised during the v2.0 committee review
+  Raised during the v2.0 pre-submission review
   (Section~\ref{sec:scope-nongoals}); it requires a new enumeration
   value, which this CPEX deliberately avoids, so it is recorded here
   rather than folded in.
@@ -1481,7 +1481,7 @@ introduced; \texttt{FaceCenter} already exists in
   descriptions and SIDS quotations against the MLL source and SIDS
   documentation source.
 \item \textbf{v2.0} --- Broadened to classical face sections following
-  committee review, which made two observations this version adopts:
+  pre-submission review, which made two observations this version adopts:
   (i)~an explicit \texttt{PointList} can only ever reference faces that
   carry element numbers, so ``complete'' has always effectively meant
   ``complete over the faces the zone defines,'' making the identity
