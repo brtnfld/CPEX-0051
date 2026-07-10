@@ -97,7 +97,7 @@
 \pagestyle{fancy}
 \fancyhf{}
 \fancyhead[L]{\small\color{cgnsblue} CPEX 0051 --- Implicit FaceCenter Indexing for Unstructured Zones}
-\fancyhead[R]{\small\color{cgnsblue} Version 2.0}
+\fancyhead[R]{\small\color{cgnsblue} Version 1.0}
 \fancyfoot[C]{\small\color{cgnsblue}\thepage}
 \renewcommand{\headrulewidth}{0.5pt}
 \renewcommand{\headrule}{\hbox to\headwidth{\color{cgnsgold}\leaders\hrule height\headrulewidth\hfill}}
@@ -119,7 +119,7 @@
   {\Large\color{cgnsteal} Implicit FaceCenter Indexing for Unstructured Zones\\
    with Explicitly Defined Face Sections}\\[0.4em]
   {\color{cgnsgold}\rule{0.4\textwidth}{0.8pt}}\\[0.6em]
-  {\large Version 2.0}\\[0.6em]
+  {\large Version 1.0}\\[0.6em]
   \today
 \end{center}
 
@@ -193,13 +193,11 @@ read \emph{without} a \texttt{PointList}/\texttt{PointRange}, indexed
 directly against that block, exactly as \texttt{CellCenter} is indexed
 against the zone's \texttt{CellDimension}-order elements. The relaxation
 is strictly additive: files using the existing identity-point-set
-workaround remain fully conformant. Version~1.x of this proposal was
-scoped to \texttt{NGON\_n} zones only; it was broadened to classical
-face sections in response to pre-submission review feedback (see
-Section~\ref{sec:revision-history}), which observed that the identity
+workaround remain fully conformant. The relaxation covers classical
+(non-polyhedral) face sections as well as \texttt{NGON\_n}: the identity
 point set is exactly as redundant for a boundary-patch \texttt{QUAD\_4}
 block as it is for an \texttt{NGON\_n} block, for the same
-element-numbering reasons.
+element-numbering reasons (Section~\ref{sec:why-ngon}).
 
 While researching the current behavior, two independent implementation
 gaps were found that this CPEX's reference implementation also addresses:
@@ -876,14 +874,14 @@ byte level.
 \label{sec:scope-nongoals}
 
 \begin{itemize}[leftmargin=2em]
-\item \textbf{Not addressed:} \texttt{EdgeCenter}. The v2.0 machinery
-  (Section~\ref{sec:definition}) would transfer directly to
+\item \textbf{Not addressed:} \texttt{EdgeCenter}. The machinery in
+  Section~\ref{sec:definition} would transfer directly to
   \texttt{EdgeCenter} data indexed against \texttt{BAR}-type sections
-  --- the v1.x objection (``no completeness guarantee for edges'') no
-  longer applies under the ``complete over the defined elements''
-  reading --- but the extension multiplies the location/dimension test
-  matrix and is deliberately left to a future CPEX rather than folded
-  into this one.
+  --- the natural objection (``no completeness guarantee for edges'')
+  does not apply, under the same ``complete over the defined
+  elements'' reading this CPEX uses for faces --- but the extension
+  multiplies the location/dimension test matrix and is deliberately
+  left to a future CPEX rather than folded into this one.
 \item \textbf{Not addressed:} the structured-zone \texttt{GridLocation}
   gap raised during the same pre-submission review: 2-D structured zones
   have no directional edge-center locations
@@ -1164,7 +1162,7 @@ cg_field_write(fn, B, Z, S, CGNS_ENUMV(RealDouble), "NormalX",
                normal_x, &F);   /* 36 values, indexed against [1,36] */
 \end{lstlisting}
 
-\subsection{Example 6: Accepted --- Classical Mesh, Boundary Faces Only (new in v2.0)}
+\subsection{Example 6: Accepted --- Classical Mesh, Boundary Faces Only}
 \label{sec:example6}
 
 The $5{\times}5{\times}5$ \texttt{HEXA\_8}/\texttt{QUAD\_4} zone from
@@ -1250,9 +1248,10 @@ implicit; item~10 guards the one existing entry point this CPEX widens.
   round-trip write, read, \texttt{cgnscheck} clean, $N_{\mathrm{face}}$
   equal to the section's \texttt{ElementSize}. Repeat with three
   contiguous same-typed patches partitioning the block, and with a
-  mixed \texttt{TRI\_3}+\texttt{QUAD\_4} contiguous pair. \emph{New in
-  v2.0; no installed base exists, so these fixtures carry the highest
-  regression value in the suite alongside item~4.}
+  mixed \texttt{TRI\_3}+\texttt{QUAD\_4} contiguous pair. \emph{This is
+  entirely new behavior with no installed base to regress against, so
+  these fixtures carry the highest regression value in the suite
+  alongside item~4.}
 \item Mixed zone, tier T1 precedence (Example~\ref{sec:example5}):
   \texttt{NGON\_n} block plus classical boundary-patch duplicates
   outside it --- accepted, and $N_{\mathrm{face}}$ must equal the
@@ -1315,30 +1314,29 @@ release notes so it is not mistaken for one.
 \section{Design Decisions}
 %% ═════════════════════════════════════════════════════════════════════════
 
-\subsection{Alternative 1: Scope to \texttt{NGON\_n} Zones Only (the v1.x design)}
+\subsection{Alternative 1: Restrict the Relaxation to \texttt{NGON\_n} Coverage Only}
 \label{sec:alt-ngon-only}
 
-Version~1.x of this CPEX restricted the relaxation to zones with
-\texttt{NGON\_n} coverage, on the grounds that only \texttt{NGON\_n}
-carries SIDS's ``all the faces in the grid'' guarantee, and that
-treating classical 2-D sections' combined \texttt{ElementSize} as ``the
-face count of the zone'' would misinterpret boundary-patch-only files.
-\textbf{Superseded in v2.0}, following pre-submission review. The v1.x
-rejection rested on reading ``all faces'' as ``all geometric faces of
-the mesh'' --- but that is not, and never was, what face-centered data
-can address. An explicit \texttt{PointList} can only reference faces
-that carry element numbers, so on a classical mesh the reachable set is
-the section-defined faces regardless of whether the point set is present
-(Section~\ref{sec:why-ngon}). Once ``complete'' is read correctly as
-``complete over the faces the zone defines,'' the coincidental-size-match
-objection dissolves: the v2.0 rule (Section~\ref{sec:definition}) never
-compares sizes against an external total at all; it requires the face
-sections' \texttt{ElementRange}s to form one structurally verifiable
-contiguous block, which either holds or does not. The identity point set
-is exactly as redundant for a boundary \texttt{QUAD\_4} block as for an
-\texttt{NGON\_n} block, and the summation/contiguity machinery is
-identical (multiple \texttt{NGON\_n} sections already required it in
-v1.x).
+A narrower version of this proposal would restrict the relaxation to
+zones with \texttt{NGON\_n} coverage, on the grounds that only
+\texttt{NGON\_n} carries SIDS's ``all the faces in the grid'' guarantee,
+and that treating classical 2-D sections' combined \texttt{ElementSize}
+as ``the face count of the zone'' would misinterpret boundary-patch-only
+files. \textbf{Rejected.} This reasoning rests on reading ``all faces''
+as ``all geometric faces of the mesh'' --- but that is not, and never
+was, what face-centered data can address. An explicit \texttt{PointList}
+can only reference faces that carry element numbers, so on a classical
+mesh the reachable set is the section-defined faces regardless of
+whether the point set is present (Section~\ref{sec:why-ngon}). Once
+``complete'' is read correctly as ``complete over the faces the zone
+defines,'' the coincidental-size-match objection dissolves: the rule in
+Section~\ref{sec:definition} never compares sizes against an external
+total at all; it requires the face sections' \texttt{ElementRange}s to
+form one structurally verifiable contiguous block, which either holds or
+does not. The identity point set is exactly as redundant for a boundary
+\texttt{QUAD\_4} block as for an \texttt{NGON\_n} block, and the
+summation/contiguity machinery is identical --- multiple \texttt{NGON\_n}
+sections already required it (Section~\ref{sec:definition}).
 
 \subsection{Alternative 2: New Explicit Marker Node (e.g., \texttt{FacesComplete})}
 
@@ -1369,8 +1367,8 @@ common compatibility pattern of Example~\ref{sec:example5}: an
 boundary-patch sections duplicating the boundary faces for
 \texttt{BC\_t}/tool consumption. A naive union over all face sections
 would count those boundary faces twice and silently change the implicit
-array's length and meaning for precisely the polyhedral files this CPEX
-originally targeted. The two-tier rule in
+array's length and meaning for precisely this common polyhedral-plus-BC
+pattern. The two-tier rule in
 Section~\ref{sec:definition} resolves this without any new markers:
 when \texttt{NGON\_n} is present it is, by its SIDS definition, already
 the complete face set, so any coexisting classical sections are
@@ -1420,7 +1418,7 @@ committee rather than folded into this proposal's scope.
 \item Should a companion CPEX add \texttt{IEdgeCenter}/\texttt{JEdgeCenter}
   to \texttt{GridLocation\_t} for 2-D structured zones, restoring symmetry
   with 3-D's \texttt{IFaceCenter}/\texttt{JFaceCenter}/\texttt{KFaceCenter}?
-  Raised during the v2.0 pre-submission review
+  Raised during pre-submission review
   (Section~\ref{sec:scope-nongoals}); it requires a new enumeration
   value, which this CPEX deliberately avoids, so it is recorded here
   rather than folded in.
@@ -1466,38 +1464,6 @@ Aside from the new public \texttt{cg\_zone\_face\_range()} wrapper,
 no new public enumerations, structs, or function signatures are
 introduced; \texttt{FaceCenter} already exists in
 \texttt{GridLocation\_t}.
-
-%% ═════════════════════════════════════════════════════════════════════════
-\section{Revision History}
-\label{sec:revision-history}
-%% ═════════════════════════════════════════════════════════════════════════
-
-\begin{itemize}[leftmargin=2em]
-\item \textbf{v1.0--1.2} --- Initial proposal, scoped to zones with
-  complete \texttt{NGON\_n} face coverage only. Classical 2-D sections
-  were explicitly excluded (then-Alternative~1,
-  Section~\ref{sec:alt-ngon-only}) on the grounds that the SIDS gives
-  them no ``all faces'' guarantee. v1.2 corrected the implementation-gap
-  descriptions and SIDS quotations against the MLL source and SIDS
-  documentation source.
-\item \textbf{v2.0} --- Broadened to classical face sections following
-  pre-submission review, which made two observations this version adopts:
-  (i)~an explicit \texttt{PointList} can only ever reference faces that
-  carry element numbers, so ``complete'' has always effectively meant
-  ``complete over the faces the zone defines,'' making the identity
-  point set exactly as redundant for a boundary-\texttt{QUAD\_4} block
-  as for an \texttt{NGON\_n} block; and (ii)~the multi-section
-  union/contiguity machinery was already required for multiple
-  \texttt{NGON\_n} sections, so extending it to classical sections adds
-  no new mechanism. Renamed the coverage definition to \emph{complete
-  face-section coverage} with a two-tier \texttt{NGON\_n}-precedence
-  rule (Section~\ref{sec:tier-rationale}), renamed the helper to
-  \texttt{cgi\_zone\_face\_range()}/\texttt{cg\_zone\_face\_range()},
-  added the classical-mesh example (Example~\ref{sec:example6}) and
-  corresponding test fixtures, and recorded the reviewer's
-  \texttt{IEdgeCenter}/\texttt{JEdgeCenter} suggestion as a candidate
-  companion CPEX (Section~\ref{sec:open-questions}).
-\end{itemize}
 
 %% ═════════════════════════════════════════════════════════════════════════
 \section{References}
