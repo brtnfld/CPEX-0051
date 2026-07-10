@@ -544,7 +544,12 @@ Call an \texttt{Elements\_t} section of a \texttt{CellDimension}-3
 unstructured zone a \textbf{face section} if its element type is
 \texttt{NGON\_n} or a classical 2-D type (\texttt{TRI\_3},
 \texttt{TRI\_6}, \texttt{QUAD\_4}, \texttt{QUAD\_8}, \texttt{QUAD\_9},
-or a \texttt{MIXED} section containing only such types). The zone's
+or a \texttt{MIXED} section containing only such types). A \texttt{MIXED}
+section mixing 2-D types with 1-D (\texttt{BAR}) or 3-D element types is
+therefore not a face section at all --- it is simply excluded from
+consideration, exactly like any other non-face-type section, and (per
+Condition~2 below) must lie outside the face-indexing block like the
+boundary-patch sections of Example~\ref{sec:example5}. The zone's
 \textbf{face-indexing sections} are then determined by a two-tier
 precedence rule:
 
@@ -752,39 +757,82 @@ SIDS defines \texttt{DiscreteData\_t}'s \texttt{DataSize[]} by reference
 /* cgns_internals.c */
 int cgi_zone_face_range(cgns_zone *zone,
                         cgsize_t *start, cgsize_t *end);
-    /* Returns CG_OK and the contiguous [start,end] face-indexing
-     * block if the zone has complete face-section coverage per the
-     * definition in this document's Detailed Description section,
-     * applying the two-tier rule: NGON_n sections define the block
-     * when any are present; otherwise all classical 2-D face
-     * sections do. Returns CG_NODE_NOT_FOUND if the zone has no
-     * face-type sections at all; returns CG_ERROR (with cgi_error()
-     * detail) if face-type sections exist but the applicable tier's
-     * union is not one contiguous block. The cgi_error() message
-     * names the zone and, for the gap case, the interrupting section
-     * (e.g. "zone 'fluid_zone': face sections [1,20] and [31,50]
-     * are not contiguous (elements 21-30 belong to section 'Hexas'"),
-     * so the failure is diagnosable without re-deriving element
-     * ranges by hand. Rejects (CG_ERROR) any ElementRange with
-     * start < 1 or end < start, and any face count that would
-     * overflow cgsize_t arithmetic in the caller's size computation,
-     * before returning -- both ranges are read from the file and
-     * must not be trusted blindly. */
+    /* Asserts CellDimension == 3 first: FaceCenter is not a valid
+     * GridLocation for CellDimension 1 or 2 (SIDS Sec. 7.7 location
+     * table), so this helper hard-rejects (CG_ERROR) any other
+     * CellDimension immediately, rather than attempting to interpret
+     * that zone's 2-D "face-shaped" elements (which are its CELLS,
+     * not faces) as a face section. This assertion belongs in the
+     * helper itself, not only in the Sec. 4.2 definition it
+     * implements, since the public read-side wrapper below is not
+     * otherwise gated by cgi_check_location.
+     *
+     * Otherwise, returns CG_OK and the contiguous [start,end]
+     * face-indexing block if the zone has complete face-section
+     * coverage per the definition in this document's Detailed
+     * Description section, applying the two-tier rule: NGON_n
+     * sections define the block when any are present; otherwise all
+     * classical 2-D face sections do. Returns CG_NODE_NOT_FOUND if
+     * the zone has no face-type sections at all; returns CG_ERROR
+     * (with cgi_error() detail) if face-type sections exist but the
+     * applicable tier's union is not one contiguous block. The
+     * cgi_error() message names the zone and, for the gap case, the
+     * interrupting section (e.g. "zone 'fluid_zone': face sections
+     * [1,20] and [31,50] are not contiguous (elements 21-30 belong
+     * to section 'Hexas'"), so the failure is diagnosable without
+     * re-deriving element ranges by hand. Rejects (CG_ERROR) any
+     * ElementRange with start < 1 or end < start, and any face count
+     * that would overflow cgsize_t arithmetic in the caller's size
+     * computation, before returning -- both ranges are read from the
+     * file and must not be trusted blindly. */
 \end{lstlisting}
 
-This helper is used by \texttt{cg\_sol\_write}/\texttt{cg\_field\_write}
-(and their \texttt{cg\_discrete\_*} counterparts) whenever
-\texttt{GridLocation~=~FaceCenter} is requested on an unstructured zone
-with no accompanying point set, to (a)~confirm the relaxation applies and
-(b)~compute the expected \texttt{DataArray\_t} size for validation on
-write, exactly as \texttt{CellSize[]} is already used for
-\texttt{CellCenter}. Coverage is a property of the zone's
-\texttt{Elements\_t} section layout, already resident in memory as
-\texttt{zone->section[]}; the reference implementation computes it once
-per zone (caching the result on \texttt{cgns\_zone}) rather than
-re-scanning the section list on every \texttt{cg\_field\_write} call to a
-multi-field \texttt{FaceCenter} solution, and invalidates the cached
-result on \texttt{cg\_section\_write}/\texttt{cg\_section\_partial\_write}.
+This helper is wired directly into \texttt{cgi\_datasize()} --- the single
+internal function that already computes \texttt{DataSize[]} for both the
+write path (\texttt{cg\_field\_write}) and the read path
+(\texttt{cg\_sol\_size}, called by applications to learn a solution's
+dimensions before reading) --- as a new case exactly mirroring how
+\texttt{CellSize[]} is already used for \texttt{CellCenter} there. This
+placement is deliberate and load-bearing: \texttt{cgi\_datasize()} today
+has no \texttt{FaceCenter} case for \texttt{CellDimension~=~3} at all, so
+a write-only check bolted onto \texttt{cg\_field\_write} would leave
+\texttt{cg\_sol\_size} --- and therefore ordinary
+\texttt{cg\_sol\_size}~+~\texttt{cg\_field\_read} read code --- unable to
+learn an implicit-form solution's size even in a fully CPEX-aware
+library. Updating \texttt{cgi\_datasize()} itself fixes both directions
+in one place. (A \emph{legacy}, pre-CPEX library still lacks this case
+entirely, so it hits the existing ``Location not yet supported'' error
+in \texttt{cg\_sol\_size} on such a file --- a clean, loud
+\texttt{CG\_ERROR} rather than a silent misread; see
+Section~\ref{sec:backward-compat}.)
+
+Coverage is a property of the zone's \texttt{Elements\_t} section layout,
+already resident in memory as \texttt{zone->section[]}; the reference
+implementation computes it once per zone (caching the result on
+\texttt{cgns\_zone}) rather than re-scanning the section list on every
+\texttt{cg\_field\_write} call to a multi-field \texttt{FaceCenter}
+solution. Because \emph{any} write path that adds, replaces, or removes
+one of the zone's \texttt{Elements\_t} children can invalidate this
+cache, it must be invalidated on all of: \texttt{cg\_section\_write},
+\texttt{cg\_poly\_section\_write}, \texttt{cg\_section\_partial\_write},
+\texttt{cg\_section\_general\_write}, and their parallel counterparts
+\texttt{cgp\_section\_write}/\texttt{cgp\_poly\_section\_write}; and,
+for low-level access, whenever \texttt{cg\_delete\_node} removes an
+\texttt{Elements\_t} child of the zone.
+
+A consequence of computing coverage from \texttt{zone->section[]} is a
+write-ordering constraint that does not exist for \texttt{CellCenter}
+(whose \texttt{CellSize[]} is a required field declared directly on
+\texttt{Zone\_t}, not derived from \texttt{Elements\_t} sections): an
+application must write all of a zone's face-indexing element sections
+(via \texttt{cg\_section\_write} or equivalent) \emph{before} calling
+\texttt{cg\_field\_write}/\texttt{cg\_discrete\_write} for an implicit
+\texttt{FaceCenter} solution on that zone. Calling
+\texttt{cg\_field\_write} first finds no face-type sections yet
+registered, so \texttt{cgi\_zone\_face\_range()} returns
+\texttt{CG\_NODE\_NOT\_FOUND} and the write fails requiring an explicit
+point set --- a clean failure, but one that must be documented rather
+than discovered by trial and error.
 
 A thin public wrapper is also added, so that reader-side code (as in
 Example~\ref{sec:example3}) does not have to reimplement the coverage
@@ -797,6 +845,37 @@ int cg_zone_face_range(int fn, int B, int Z,
     /* Thin wrapper over cgi_zone_face_range() for read-side
      * consumers. Same return-value contract. */
 \end{lstlisting}
+
+\begin{lstlisting}[language=Fortran]
+! cgns_f.F90; follows the existing cg_index_dim_f pattern exactly:
+! a SUBROUTINE wrapper with trailing ier, whose internal INTERFACE
+! binds directly to the C function via ISO_C_BINDING.
+SUBROUTINE cg_zone_face_range_f(fn, B, Z, start, end, ier)
+  IMPLICIT NONE
+  INTEGER :: fn, B, Z
+  cgsize_t :: start, end
+  INTEGER, INTENT(OUT) :: ier
+
+  INTERFACE
+    INTEGER(C_INT) FUNCTION cg_zone_face_range(fn, B, Z, start, end) &
+        BIND(C, name="cg_zone_face_range")
+      IMPORT :: C_INT, cgsize_t
+      IMPLICIT NONE
+      INTEGER(C_INT), VALUE, INTENT(IN) :: fn, B, Z
+      cgsize_t :: start, end
+    END FUNCTION cg_zone_face_range
+  END INTERFACE
+
+  ier = INT(cg_zone_face_range(INT(fn, C_INT), INT(B, C_INT), &
+                                INT(Z, C_INT), start, end))
+END SUBROUTINE cg_zone_face_range_f
+\end{lstlisting}
+
+Parity between C and Fortran interfaces is required for every public MLL
+function; \texttt{cg\_zone\_face\_range} is no exception, and its binding
+must land in the same patch as the C function, following the existing
+\texttt{cgns\_f.F90} pattern used for every other \texttt{cg\_*} entry
+point (e.g.\ \texttt{cg\_index\_dim\_f}).
 
 \subsubsection{Fix: \texttt{cg\_sol\_write} allow-list}
 \label{sec:mll_sol_write_fix}
@@ -1231,10 +1310,11 @@ require no amendment.
 %% ═════════════════════════════════════════════════════════════════════════
 
 The reference implementation's test suite must cover at least the
-following fixtures. Items~1--7 exercise the coverage predicate (both
-tiers) and the new sizing rule directly; items~8--9 pin down behavior
-this CPEX makes newly reachable and that would otherwise be left
-implicit; item~10 guards the one existing entry point this CPEX widens.
+following fixtures, grouped by what they exercise: the coverage
+predicate and sizing rule under both tiers; the write- and read-side
+ordering and caching behavior this CPEX newly introduces (which would
+otherwise be left to be discovered by trial and error); and the
+existing entry points this CPEX widens or leaves unchanged.
 
 \begin{enumerate}[leftmargin=2em]
 \item Single \texttt{NGON\_n} section, implicit form
@@ -1283,6 +1363,27 @@ implicit; item~10 guards the one existing entry point this CPEX widens.
   must return \texttt{CG\_ERROR} per the rule in
   Section~\ref{sec:backward-compat}. This behavior is otherwise
   undefined by the prose alone; the test is what pins it down.
+\item Fields-before-sections ordering (the converse case): call
+  \texttt{cg\_sol\_write}/\texttt{cg\_field\_write} for an implicit
+  \texttt{FaceCenter} solution \emph{before} the zone's face-indexing
+  element sections have been written. Must fail with
+  \texttt{CG\_NODE\_NOT\_FOUND} propagated as \texttt{CG\_ERROR}, per
+  Section~\ref{sec:mll_helper}; writing the sections first and retrying
+  must then succeed.
+\item Read-side sizing via \texttt{cg\_sol\_size}: on an implicit-form
+  solution, confirm \texttt{cg\_sol\_size} (not just
+  \texttt{cg\_field\_write}) returns the correct \texttt{DataSize[]},
+  exercising the shared \texttt{cgi\_datasize()} code path
+  (Section~\ref{sec:mll_helper}) rather than only the write-time check.
+\item Cache invalidation: write an implicit \texttt{FaceCenter} field
+  (populating the cache), then add, replace, or delete a face-indexing
+  section via each of \texttt{cg\_section\_write},
+  \texttt{cg\_poly\_section\_write}, \texttt{cg\_section\_partial\_write},
+  \texttt{cg\_section\_general\_write}, \texttt{cgp\_section\_write},
+  \texttt{cgp\_poly\_section\_write}, and \texttt{cg\_delete\_node}; a
+  subsequent \texttt{cg\_zone\_face\_range()} call must reflect the
+  updated section layout, not the stale cached value
+  (Section~\ref{sec:mll_helper}).
 \item Malformed \texttt{ElementRange} inputs to
   \texttt{cgi\_zone\_face\_range()}: \texttt{start~<~1},
   \texttt{end~<~start}, and (on a 32-bit \texttt{cgsize\_t} build) a range
@@ -1295,6 +1396,15 @@ implicit; item~10 guards the one existing entry point this CPEX widens.
   \texttt{cg\_gridlocation\_write}'s existing behavior) and rejected
   below that, pinning down the delegated-\texttt{cgi\_check\_location}
   behavior in both directions.
+\item \texttt{CellDimension} guard in \texttt{cgi\_zone\_face\_range()}:
+  called on \texttt{CellDimension~1} and \texttt{2} zones (including one
+  with 2-D ``face-shaped'' \texttt{TRI\_3}/\texttt{QUAD\_4} \emph{cell}
+  sections, to confirm they are not mistaken for face sections), must
+  return \texttt{CG\_ERROR} rather than attempting coverage analysis
+  (Section~\ref{sec:mll_helper}).
+\item Fortran parity: \texttt{cg\_zone\_face\_range\_f} called with the
+  same fixtures as items 1--3 above, confirming identical return codes
+  and \texttt{start}/\texttt{end} values to the C entry point.
 \end{enumerate}
 
 \textbf{Note on \texttt{cgnscheck} regression risk.} Once
@@ -1454,16 +1564,18 @@ Example~\ref{sec:example2}'s single-call write works end to end.
 \midrule
 \texttt{cgi\_zone\_face\_range()} & New internal helper (Sec.~\ref{sec:mll_helper}) & v5.0.0 (this CPEX) \\
 \texttt{cg\_zone\_face\_range()} & New public wrapper, read-side coverage check (Sec.~\ref{sec:mll_helper}) & v5.0.0 (this CPEX) \\
+\texttt{cg\_zone\_face\_range\_f()} & Fortran binding for the above (Sec.~\ref{sec:mll_helper}) & v5.0.0 (this CPEX) \\
+\texttt{cgi\_datasize()} & New \texttt{FaceCenter}/\texttt{CellDimension~=~3} case, serving both \texttt{cg\_field\_write} and \texttt{cg\_sol\_size} (Sec.~\ref{sec:mll_helper}) & v5.0.0 (this CPEX) \\
 \bottomrule
 \end{tabular}
 \end{center}
 \endgroup
 \linenumbers
 
-Aside from the new public \texttt{cg\_zone\_face\_range()} wrapper,
-no new public enumerations, structs, or function signatures are
-introduced; \texttt{FaceCenter} already exists in
-\texttt{GridLocation\_t}.
+Aside from the new public \texttt{cg\_zone\_face\_range()} wrapper and
+its Fortran binding \texttt{cg\_zone\_face\_range\_f()}, no new public
+enumerations, structs, or function signatures are introduced;
+\texttt{FaceCenter} already exists in \texttt{GridLocation\_t}.
 
 %% ═════════════════════════════════════════════════════════════════════════
 \section{References}
