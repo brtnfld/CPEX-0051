@@ -279,7 +279,7 @@ The zone's 300 interior faces are not addressable at all --- they have no
 element numbers, so no \texttt{PointList} could reference them today
 either; the point-set requirement has never made them reachable. For the
 faces that \emph{are} reachable, \texttt{[126,275]} is again exactly the
-face section's own \texttt{ElementRange}, restated by hand. Two
+face section's own \texttt{ElementRange}, restated by hand. Three
 consequences follow in both the polyhedral and the classical case:
 
 \begin{enumerate}[leftmargin=2em]
@@ -293,6 +293,10 @@ consequences follow in both the polyhedral and the classical case:
   set and compare it against the face count, on every zone, for every
   solution. This is a small but repeated and entirely avoidable
   per-solution check.
+\item \textbf{Storage cost.} If the point set is stored using a
+  \texttt{PointList} array, it adds 4--8 bytes per face to the file size,
+  for no information gain. This cost gets worse for time-dependant data, where
+  the point set must be repeated for every time step.
 \end{enumerate}
 
 \subsection{Origin of the Restriction}
@@ -541,10 +545,10 @@ The proposal has four parts:
 \label{sec:definition}
 
 Call an \texttt{Elements\_t} section of a \texttt{CellDimension}-3
-unstructured zone a \textbf{face section} if its element type is
-\texttt{NGON\_n} or a classical 2-D type (\texttt{TRI\_3},
-\texttt{TRI\_6}, \texttt{QUAD\_4}, \texttt{QUAD\_8}, \texttt{QUAD\_9},
-or a \texttt{MIXED} section containing only such types). A \texttt{MIXED}
+unstructured zone $Z$ a \textbf{face section} if its element type is
+\texttt{NGON\_n} or a classical 2-D type (\texttt{TRI\_3}, \texttt{QUAD\_4},
+and related high order elements) or a \texttt{MIXED} section containing only
+such types. A \texttt{MIXED}
 section mixing 2-D types with 1-D (\texttt{BAR}) or 3-D element types is
 therefore not a face section at all --- it is simply excluded from
 consideration, exactly like any other non-face-type section, and (per
@@ -552,6 +556,8 @@ Condition~2 below) must lie outside the face-indexing block like the
 boundary-patch sections of Example~\ref{sec:example5}. The zone's
 \textbf{face-indexing sections} are then determined by a two-tier
 precedence rule:
+% NB : I removed TRI_6 and QUAD_8/9 because you did not mention
+% all the 2D types (TRI_9, TRI_12, QUAD_12, etc.)
 
 \begin{enumerate}[leftmargin=2em]
 \item[T1.] If $Z$ contains one or more \texttt{NGON\_n} sections, the
@@ -562,6 +568,20 @@ precedence rule:
   kept for \texttt{BC\_t}/tool compatibility) are geometric restatements
   of faces the \texttt{NGON\_n} block already numbers, and including
   them would double-count those faces.
+  %
+  % Does this 'double-defined' case occur in practice? For geometric
+  % patches as BC_t, you do not have to redefine the patch as a face section;
+  % you can just reference it with a PointList/PointRange.
+  % I did not find anything in SIDS that allows a face to appear in two different
+  % face sections, nor anything that forbids it.
+  % Such a sentence would probably establish authority for the future, so we have
+  % to be careful.
+  %
+  % Using the cell analogy, I think we would never define the same cell
+  % twice, both as an NFACE_n polyhedral cell and as a classical (for example
+  % HEXA_8) cell. But maybe the face case if different for legacy reasons.
+  %
+  % This can be left as an open question for the committee.
 \item[T2.] Otherwise, the face-indexing sections are all of $Z$'s
   classical face sections.
 \end{enumerate}
@@ -641,6 +661,31 @@ CellCenter, unless one of PointList or PointRange is present,
 {\color{cgnsgold}or unless GridLocation is FaceCenter and the zone has
 complete face-section coverage, in which case indexing follows the
 zone's face-section element numbering (\S7.3) directly.}
+\end{sidsnew}
+
+@Scot: an other option would be to remove note 5 and to update the text above
+the GridLocation table : 
+
+\textbf{Current text:}
+\begin{sidsold}
+For unstructured grids, the value of GridLocation alone specifies location
+and indexing of flow solution data only for vertex and cell-centered data.
+The reason for this is that element-based grid connectivity provided in the
+Elements\_t data structures explicitly indexes only vertices and cells.
+For data stored at alternate grid locations (e.g., edges), additional
+connectivity information is needed. 
+\end{sidsold}
+
+\textbf{Proposed text:}
+\begin{sidsnew}
+For unstructured grids, the value of GridLocation alone specifies location
+and indexing of flow solution data only for vertex data, {\color{cgnsgold}
+cell-centered data, or face-centered data when the zone has complete face-section
+coverage. In the latter case, indexing follows the zone's face-section element
+numbering (\S7.3) directly}.
+For data stored at alternate grid locations (e.g., edges),  {\color{cgnsgold}
+or for zones without complete face-section coverage}, additional connectivity
+information is needed. 
 \end{sidsnew}
 
 \subsection{Revised SIDS Text: \texttt{DiscreteData\_t} (\S12.4)}
@@ -786,6 +831,10 @@ int cgi_zone_face_range(cgns_zone *zone,
      * computation, before returning -- both ranges are read from the
      * file and must not be trusted blindly. */
 \end{lstlisting}
+
+% If we recognize MIXED sections that only contains surfacic elements
+% as a face section, we may need an additional helper to check the
+% content of a MIXED section.
 
 This helper is wired directly into \texttt{cgi\_datasize()} --- the single
 internal function that already computes \texttt{DataSize[]} for both the
@@ -1291,6 +1340,8 @@ point set, exactly as today.
   the tier rule, the ``\texttt{NGON\_n} specifies all faces'' statement
   already there (Section~\ref{sec:why-ngon}); no new text is needed in
   \S7.3 itself.
+% Should we include the 'tier rule' and/or the 'complete face-section coverage'
+% somewhere in the Elements_t section ?
 \item No new SIDS node types, enumerations, or structural fields are
   introduced anywhere.
 \end{itemize}
@@ -1396,6 +1447,8 @@ existing entry points this CPEX widens or leaves unchanged.
   \texttt{cg\_gridlocation\_write}'s existing behavior) and rejected
   below that, pinning down the delegated-\texttt{cgi\_check\_location}
   behavior in both directions.
+  % In my understanding FaceCenter should not be accepted for structured zones,
+  % which require I,J or KFaceCenter.
 \item \texttt{CellDimension} guard in \texttt{cgi\_zone\_face\_range()}:
   called on \texttt{CellDimension~1} and \texttt{2} zones (including one
   with 2-D ``face-shaped'' \texttt{TRI\_3}/\texttt{QUAD\_4} \emph{cell}
@@ -1498,6 +1551,23 @@ happened to cover every face would be indistinguishable from simply
 using \texttt{FlowSolution\_t}, so there is no analogous ``identity point
 set'' pain point to remove. This is left as an open question for the
 committee rather than folded into this proposal's scope.
+
+% Just a thought about this : FlowSolution_t with a point set 
+% and ZoneSubRegion_t have a very similar meaning. I believe this 
+% comes from the fact that ZoneSubRegion_t was introduced recently
+% in the standard.
+%
+% IMHO it would make more sense to restrict the usage of FlowSolution_t to
+% point-set free case to clearly distinguish the two: 
+% - FlowSolution_t/DiscreteData_t store data defined on the whole grid
+%   entities (cell, vertex, faces under CPEX0051 or edge under CPEX0051
+%   extension). PointList / PointRange is not allowed under these nodes
+% - ZoneSubRegion_t store data partially defined on a subset of the grid entities.
+%   PointList / PointRange or geometric patch (BC_t / GC_t) is mandatory
+%   under these nodes.
+
+% Of course this would be a more radical change, break compatibility
+% and it out of the scope of this CPEX. 
 
 %% ═════════════════════════════════════════════════════════════════════════
 \section{Open Questions}
